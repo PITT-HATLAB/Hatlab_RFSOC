@@ -1,16 +1,29 @@
-config={"res_ch":6, # --Fixed
-        "ro_ch":0, # --Fixed
-        "relax_delay":1, # --Fixed
-        "res_phase":0, # --Fixed
-        "pulse_style": "const", # --Fixed
-        "length":100, # [Clock ticks]
-        "readout_length":200, # [Clock ticks]
-        "pulse_gain":0, # [DAC units]
-        "pulse_freq": 100, # [MHz]
-        "adc_trig_offset": 100, # [Clock ticks]
-        "reps":50,
-        # New variables
-        "expts": 20,
-        "start":0, # [DAC units]
-        "step":100 # [DAC units]
+hw_cfg={"res_ch_I": 5,
+        "res_ch_Q": 6,
+        "qubit_ch": 2,
+        "ro_ch": 0,
+
+        "res_nzq_I": 1,
+        "res_nzq_Q": 1,
+        "qubit_nzq": 2
        }
+
+
+readout_cfg = {
+        "reps": 1,  # --Fixed
+        "adc_trig_offset": 0,  # [clock ticks]
+        "readout_length": 1010,  # [clock ticks]
+
+        "res_freq": 90,  # [MHz]
+        "res_gain": 3000,  # [DAC units]
+        "res_length": 500,  # [clock ticks]
+        "res_phase": 0,  # [deg]
+        "skewPhase": 83,  # [Degrees]
+        "IQScale": 1.03,
+
+        "soft_avgs": 1000,
+        "relax_delay": 1  # [us]
+}
+
+
+config = {**hw_cfg, **readout_cfg}
