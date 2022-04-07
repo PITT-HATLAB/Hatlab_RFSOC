@@ -11,19 +11,24 @@ hw_cfg={"res_ch_I": 5,
 
 readout_cfg = {
         "reps": 1,  # --Fixed
-        "adc_trig_offset": 0,  # [clock ticks]
+        "adc_trig_offset": 180,  # [clock ticks]
         "readout_length": 1010,  # [clock ticks]
 
-        "res_freq": 90,  # [MHz]
-        "res_gain": 3000,  # [DAC units]
-        "res_length": 500,  # [clock ticks]
-        "res_phase": 0,  # [deg]
-        "skewPhase": 83,  # [Degrees]
-        "IQScale": 1.03,
+        'res_freq': 90,
+        'res_gain': 25000,
+        'res_length': 500,
+        'res_phase': 0,
+        'skewPhase': 90,
+        'IQScale': 1.0,
 
-        "soft_avgs": 1000,
-        "relax_delay": 1  # [us]
+        "soft_avgs": 5000,
+        "relax_delay": 200  # [us]
 }
+
+rotResult={'g_val': -0.09101353892194847, 'e_val': -0.4851972140193664, 'rot_angle': 0.03955298928492021}
+
+dataPath = r"L:\Data\WISPE\LL_WISPE\s6\cooldown_20220401\\"
+sampleName = "LL_Wispe_0401_candle1"
 
 
 config = {**hw_cfg, **readout_cfg}

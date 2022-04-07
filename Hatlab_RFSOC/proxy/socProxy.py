@@ -14,4 +14,4 @@ for k,v in ns.list().items():
 
 soc = Pyro4.Proxy(ns.lookup(server_name))
 soccfg = QickConfig(soc.get_cfg())
-print(soccfg)
+# print(soccfg)

@@ -35,14 +35,27 @@ class LoopbackProgram(AveragerProgram):
         self.sync_all(self.us2cycles(cfg["relax_delay"]))
 
 
+readout_cfg = {
+    "reps": 20000,  #
+    "readout_length": 1010,  # [clock ticks]
+
+    "res_freq": 90,  # [MHz]
+    # "res_gain": 25000,  # [DAC units]
+    "res_length": 500,  # [clock ticks]
+
+    "rounds": 1,
+    "relax_delay": 20  # [us]
+}
+
+config = {**config, **readout_cfg}
+
 prog = LoopbackProgram(soccfg, config)
-adc1, = prog.acquire_decimated(soc, load_pulses=True, progress=True, debug=False)
+avgi, avgq = prog.acquire(soc, load_pulses=True, progress=True, debug=False)
 
 print("plotting")
 # Plot results.
-plt.figure()
-ax1 = plt.subplot(111, title=f"Averages = {config['soft_avgs']}", xlabel="Clock ticks",
-                  ylabel="Transmission (adc levels)")
-ax1.plot(adc1[0], label="I value; ADC 0")
-ax1.plot(adc1[1], label="Q value; ADC 0")
-ax1.legend()
+fig, ax = plt.subplots()
+hist = ax.hist2d(prog.di_buf[0], prog.dq_buf[0], bins=101)#, range=[[-400, 400], [-400, 400]])
+ax.set_aspect(1)
+fig.colorbar(hist[3])
+plt.show()
