@@ -1,3 +1,5 @@
+from proxy.socProxy import soccfg, soc
+
 hw_cfg={"res_ch_I": 5,
         "res_ch_Q": 6,
         "qubit_ch": 2,
@@ -25,10 +27,20 @@ readout_cfg = {
         "relax_delay": 200  # [us]
 }
 
-rotResult={'g_val': -0.09101353892194847, 'e_val': -0.4851972140193664, 'rot_angle': 0.03955298928492021}
+qubit_cfg={
+    "sigma": soc.us2cycles(0.7),
+    "sigma_ef": soc.us2cycles(2.5),
+    "ge_freq":4907.919889993999,
+    "t2r_freq":4907.909889993999,
+    # "ef_freq":4757.46,
+    "ef_freq": 4847.5,
+    "pi_gain": 19893,
+    "pi2_gain":9937
+}
+
+rotResult={'g_val': -0.07459193132084918, 'e_val': -0.516741624590257, 'rot_angle': 19.685586408728216}
 
 dataPath = r"L:\Data\WISPE\LL_WISPE\s6\cooldown_20220401\\"
 sampleName = "LL_Wispe_0401_candle1"
 
-
-config = {**hw_cfg, **readout_cfg}
+config = {**hw_cfg, **readout_cfg, **qubit_cfg}

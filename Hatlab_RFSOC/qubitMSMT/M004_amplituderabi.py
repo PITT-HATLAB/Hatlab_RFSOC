@@ -10,7 +10,7 @@ from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
 from qubitMSMT.config import config, rotResult, dataPath, sampleName
 
 
-class AmplitudeRabiProgram(RAveragerProgram):
+class AmplitudeRabiProgram(PAveragerProgram):
     def initialize(self):
         cfg = self.cfg
 
@@ -24,7 +24,7 @@ class AmplitudeRabiProgram(RAveragerProgram):
         self.r_gain=self.sreg(cfg["qubit_ch"], "gain")   # get gain register for qubit_ch
 
         res_freq = self.freq2reg(cfg["res_freq"], gen_ch=cfg["res_ch_I"], ro_ch=cfg["ro_ch"])  # convert frequency to dac frequency (ensuring it is an available adc frequency)
-        qubit_freq = soc.freq2reg(cfg["qubit_ge_freq"])
+        qubit_freq = soc.freq2reg(cfg["ge_freq"])
 
         # add qubit and readout pulses to respective channels
         self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=cfg["sigma"]*4)
@@ -54,40 +54,35 @@ class AmplitudeRabiProgram(RAveragerProgram):
     def update(self):
         self.mathi(self.q_rp, self.r_gain, self.r_gain, '+', self.cfg["step"])  # update gain of the Gaussian pi pulse
 
-qubit_cfg={
-    "sigma": soc.us2cycles(0.30),
-    "qubit_ge_freq":4907.927
-}
+if __name__ == "__main__":
+    expt_cfg={
+        "start":-30000,
+        "step":200,
+        "expts":300,
+        "reps": 500,
+        "relax_delay":200
+           }
+    config.update(expt_cfg) #combine configs
 
-expt_cfg={
-    "start":-30000,
-    "step":200,
-    "expts":300,
-    "reps": 500,
-    "relax_delay":200
-       }
-
-config.update(expt_cfg) #combine configs
-config.update(qubit_cfg)
-
-print("running...")
-rabi=AmplitudeRabiProgram(soccfg, config)
-x_pts, avgi, avgq  = rabi.acquire(soc,load_pulses=True,progress=True, debug=False)
-print("done...\n plotting...")
+    print("running...")
+    rabi=AmplitudeRabiProgram(soccfg, config)
+    x_pts, avgi, avgq  = rabi.acquire(soc,load_pulses=True,progress=True, debug=False)
+    print("done...\n plotting...")
 
 
-#Plotting Results
-plt.figure()
-plt.subplot(111, title= f"Amplitude Rabi, $\sigma={soc.cycles2us(config['sigma'])*1000}$ ns", xlabel="Gain", ylabel="Qubit Population" )
-plt.plot(x_pts,avgi[0][0],'o-', markersize = 1)
-plt.plot(x_pts,avgq[0][0],'o-', markersize = 1)
+    #Plotting Results
+    plt.figure()
+    plt.subplot(111, title= f"Amplitude Rabi, $\sigma={soc.cycles2us(config['sigma'])*1000}$ ns", xlabel="Gain", ylabel="Qubit Population" )
+    plt.plot(x_pts,avgi[0][0],'o-', markersize = 1)
+    plt.plot(x_pts,avgq[0][0],'o-', markersize = 1)
 
-piPul = qfr.PiPulseTuneUp(x_pts, avgi[0][0]+1j*avgq[0][0])
-piResult = piPul.run()
-piResult.plot()
-piResult.print_ge_rotation()
+    piPul = qfr.PiPulseTuneUp(x_pts, avgi[0][0]+1j*avgq[0][0])
+    piResult = piPul.run()
+    piResult.plot()
+    piResult.print_ge_rotation()
 
 
-# ----- save data to pc --------
-data_temp = {"x_data":x_pts, "i_data": avgi[0][0], "q_data": avgq[0][0]}
-saveData(data_temp, sampleName+"_pipulse", dataPath)
+    # ----- save data to pc --------
+    data_temp = {"x_data":x_pts, "i_data": avgi[0][0], "q_data": avgq[0][0]}
+    saveData(data_temp, sampleName+"_pipulse", dataPath)
+
