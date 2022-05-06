@@ -59,8 +59,8 @@ if __name__ == "__main__":
         "start":-30000,
         "step":200,
         "expts":300,
-        "reps": 500,
-        "relax_delay":200
+        "reps": 300,
+        "relax_delay":500
            }
     config.update(expt_cfg) #combine configs
 

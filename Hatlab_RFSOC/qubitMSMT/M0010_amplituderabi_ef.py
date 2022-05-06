@@ -42,24 +42,24 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
         set_pulse_registers_IQ(self, cfg["res_ch_I"], cfg["res_ch_Q"], cfg["skewPhase"],  cfg["IQScale"],
                                style="const", freq=res_freq, phase=cfg["res_phase"], gain=cfg["res_gain"],
                                 length=cfg["res_length"])
+
+
         self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=cfg["sigma"]*4)
-        self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb",waveform="qubit",
-                                 phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
-                                 freq=self.qubit_freq_ge, gain=cfg["pi_gain"])
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit_ef", sigma=cfg["sigma_ef"], length=cfg["sigma_ef"]*4)
+
         self.sync_all(self.us2cycles(1))  # give processor some time to configure pulses
 
     def body(self):
         cfg = self.cfg
         if cfg['prepare_e']:
-            self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=cfg["sigma"] * 4)
             self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb", waveform="qubit",
                                      phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
                                      freq=self.qubit_freq_ge, gain=cfg["pi_gain"])
             self.pulse(ch=self.cfg["qubit_ch"])  # play ge gaussian pulse
             self.sync_all(soc.us2cycles(0.05))  # align channels and wait 50ns
 
-        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma_ef"], length=cfg["sigma_ef"]*4)
-        self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb", waveform="qubit",
+
+        self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb", waveform="qubit_ef",
                                  phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
                                  freq=self.qubit_freq_ef, gain=self.gain_start)
         self.mathi(self.q_rp, self.r_gain, self.r_gain_ef, '+', 0)  # update gain list index
@@ -80,10 +80,10 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
 
 expt_cfg={
     "start":-30000,
-    "step":200,
-    "expts":300,
-    "reps": 1000,
-    "relax_delay":150,
+        "step":200,
+        "expts":300,
+        "reps": 500,
+        "relax_delay": 400,
     "prepare_e": True
        }
 

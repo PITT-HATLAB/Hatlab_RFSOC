@@ -13,12 +13,12 @@ def loadData(fileName, filePath):
 
 if __name__ == "__main__":
     dataPath = r"L:\Data\WISPE\LL_WISPE\s6\cooldown_20220401\\"
-    sampleName = "LL_Wispe_0401_candle1"
+    sampleName = "LL_Wispe_0322_wispe1"
 
     # process pi;pulse result
     # get  piResult.Erot_result
 steps = 25
-freqR = 4907.909889993999
+freqR = 4952.8
 
 t1_time_array = np.zeros(steps)
 t1_result_array = np.zeros(steps)

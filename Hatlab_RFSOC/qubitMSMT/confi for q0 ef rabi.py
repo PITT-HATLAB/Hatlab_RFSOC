@@ -24,20 +24,20 @@ readout_cfg = {
         'IQScale': 1.0,
 
         "soft_avgs": 5000,
-        "relax_delay": 250  # [us]
+        "relax_delay": 200  # [us]
 }
 
 qubit_cfg={
     "sigma": soc.us2cycles(0.15),
     "ge_freq":3219.63343149,
-    "sigma_ef": soc.us2cycles(0.15),
-    "t2r_freq":3795.02,
-    "ef_freq":3073.54,
-    "pi_gain": 12882,
-    "pi2_gain":6425
+    "sigma_ef": soc.us2cycles(0.7),
+    "t2r_freq":3219.60343149,
+    "ef_freq":3073.71,
+    "pi_gain": 12195,
+    "pi2_gain":6100
 }
 
-rotResult={'g_val': -0.06378638923450004, 'e_val': 0.08586107413682158, 'rot_angle': 2.65176794353093}
+rotResult={'g_val': -0.11672272363672004, 'e_val': -0.19615214153844546, 'rot_angle': 0.619856103079681}
 
 
 dataPath = r"L:\Data\LL_candlequbits\20220320_cooldown\\"

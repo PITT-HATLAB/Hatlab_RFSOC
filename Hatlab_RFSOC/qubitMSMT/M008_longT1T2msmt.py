@@ -18,7 +18,7 @@ from M006_T2R import RamseyProgram
 from M007_T2E import T2EProgram
 reload(qfr)
 
-steps = 25
+steps = 10
 t1_time_array = np.zeros(steps)
 t2_r_time_array = np.zeros(steps)
 t2_e_time_array = np.zeros(steps)
@@ -30,19 +30,19 @@ t0 = time.time() #start time
 
 expt_cfg_t1={
     "start":0, # [us]
-    "step": 2.5,  # [us]
-    "expts": 100,
-    "reps": 400,
-    "relax_delay":250,
+    "step": 1,  # [us]
+    "expts": 450,
+    "reps": 200,
+    "relax_delay":300,
        }
 
 expt_cfg_t2={
     "start":0,  # [us]
-    "step":1, # [us]
-    "expts":500,
+    "step":0.8, # [us]
+    "expts":1000,
     "reps": 200,
     "rounds": 1,
-    "relax_delay":200 # [us]
+    "relax_delay":600 # [us]
        }
 
 config_t1 = {**config, **expt_cfg_t1} #combine configs

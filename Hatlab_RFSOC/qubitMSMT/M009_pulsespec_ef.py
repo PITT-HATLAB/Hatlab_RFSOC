@@ -74,15 +74,14 @@ class PulseProbeSpectroscopyProgram_ef(PAveragerProgram):
         self.mathi(self.q_rp, self.r_freq_ef, self.r_freq_ef, '+', self.f_step)  # update frequency list index
 
 
-expt_cfg = {"start": 4750,  # MHz
-            "step": 0.15,
+expt_cfg = {"start": 3065,  # MHz
+            "step": 0.01,
             "expts": 1000,
             "reps": 200,
             "rounds": 1,
-            "probe_length": soc.us2cycles(10),
-            "qubit_gain_ef": 5000,
-            "relax_delay": 200  # [us]
-
+            "probe_length": soc.us2cycles(5),
+            "qubit_gain_ef": 200,
+            "relax_delay": 300  # [us]
             }
 
 

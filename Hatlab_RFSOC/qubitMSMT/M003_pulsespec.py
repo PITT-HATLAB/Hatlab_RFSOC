@@ -8,7 +8,7 @@ from helpers.pulseConfig import set_pulse_registers_IQ
 from qubitMSMT.config import config
 
 
-class PulseProbeSpectroscopyProgram(RAveragerProgram):
+class PulseProbeSpectroscopyProgram(PAveragerProgram):
     def initialize(self):
         cfg = self.cfg
         self.f_start = soc.freq2reg(expt_cfg["start"])  # get start/step frequencies
@@ -50,13 +50,13 @@ class PulseProbeSpectroscopyProgram(RAveragerProgram):
     def update(self):
         self.mathi(self.q_rp, self.r_freq, self.r_freq, '+', self.f_step)  # update frequency list index
 
-expt_cfg={"start":4907, # MHz
-          "step":0.0025,
+expt_cfg={"start":3794.5, # MHz
+          "step":0.001,
           "expts":1000,
           "reps": 200,
           "rounds":1,
           "probe_length":soc.us2cycles(5),
-          "qubit_gain":400,
+          "qubit_gain":100,
           "relax_delay": 200 #[us]
          }
 

@@ -64,11 +64,11 @@ class RamseyProgram(PAveragerProgram):
 
 expt_cfg={
     "start":0,  # [us]
-    "step":1, # [us]
-    "expts":500,
+    "step":0.75, # [us]
+    "expts":1000,
     "reps": 200,
     "rounds": 1,
-    "relax_delay":200 # [us]
+    "relax_delay":500 # [us]
        }
 
 config.update(expt_cfg) #combine configs

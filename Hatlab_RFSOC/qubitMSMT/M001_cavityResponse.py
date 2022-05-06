@@ -46,3 +46,13 @@ ax1 = plt.subplot(111, title=f"Averages = {config['soft_avgs']}", xlabel="Clock 
 ax1.plot(adc1[0], label="I value; ADC 0")
 ax1.plot(adc1[1], label="Q value; ADC 0")
 ax1.legend()
+
+
+# from Hatlab_DataProcessing.fitter.generic_functions import ExponentialDecayWithCosine
+# Idata = adc1[0][110:]
+# Qdata = adc1[1][110:]
+# tData = np.arange(0, len(Idata) * 1/384e6, 1/384e6)
+#
+# fit_ = ExponentialDecayWithCosine(tData, Idata)
+# fit_result = fit_.run()
+# fit_result.plot()

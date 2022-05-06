@@ -58,10 +58,10 @@ class T1Program(PAveragerProgram):
 
 expt_cfg={
     "start":0, # [us]
-    "step": 2.5,  # [us]
-    "expts": 100,
-    "reps": 400,
-    "relax_delay":250,
+    "step": 1,  # [us]
+    "expts": 450,
+    "reps": 200,
+    "relax_delay":300,
        }
 
 config.update(expt_cfg) #combine configs

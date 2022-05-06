@@ -37,14 +37,14 @@ class LoopbackProgram(AveragerProgram):
 
 readout_cfg = {
     "reps": 20000,  #
-    "readout_length": 1010,  # [clock ticks]
+    "readout_length": 1020,  # [clock ticks]
 
     "res_freq": 90,  # [MHz]
     # "res_gain": 25000,  # [DAC units]
     "res_length": 500,  # [clock ticks]
 
     "rounds": 1,
-    "relax_delay": 20  # [us]
+    "relax_delay": 250  # [us]
 }
 
 config = {**config, **readout_cfg}
