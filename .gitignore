@@ -1,3 +1,4 @@
 *.pyc
 .idea/
 *.dat
+Hatlab_RFSOC.egg-info/

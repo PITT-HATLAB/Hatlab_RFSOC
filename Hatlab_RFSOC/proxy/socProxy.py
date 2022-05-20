@@ -1,9 +1,10 @@
 import Pyro4
 from qick import QickConfig
+import socket
 Pyro4.config.SERIALIZER = "pickle"
 Pyro4.config.PICKLE_PROTOCOL_VERSION=4
 
-ns_host = "192.168.2.3"
+ns_host = socket.gethostname() #"192.168.137.1"
 ns_port = 8888
 server_name = "myqick"
 
