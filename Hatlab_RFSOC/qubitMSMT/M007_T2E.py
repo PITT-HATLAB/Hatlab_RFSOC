@@ -3,11 +3,11 @@ from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-from helpers.pulseConfig import set_pulse_registers_IQ
-from helpers.dataTransfer import saveData
+from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
+from Hatlab_RFSOC.helpers.dataTransfer import saveData
 from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
 
-from qubitMSMT.config import config, rotResult, dataPath, sampleName
+from Hatlab_RFSOC.qubitMSMT.config import config, rotResult, dataPath, sampleName
 
 
 class T2EProgram(PAveragerProgram):
@@ -71,18 +71,20 @@ class T2EProgram(PAveragerProgram):
                    soc.us2cycles(self.cfg["step"] / 2))  # update the time between two π/2 pulses
 
 
-expt_cfg={
-    "start":0,  # [us]
-    "step":0.8, # [us]
-    "expts":1000,
-    "reps": 200,
-    "rounds": 1,
-    "relax_delay":600 # [us]
-       }
 
-config.update(expt_cfg) #combine configs
 
 if __name__ == "__main__":
+    expt_cfg = {
+        "start": 0,  # [us]
+        "step": 0.8,  # [us]
+        "expts": 1000,
+        "reps": 200,
+        "rounds": 1,
+        "relax_delay": 600  # [us]
+    }
+
+    config.update(expt_cfg)  # combine configs
+
     print("running...")
     t2ep=T2EProgram(soccfg, config)
     x_pts, avgi, avgq= t2ep.acquire(soc, load_pulses=True,progress=True, debug=False)

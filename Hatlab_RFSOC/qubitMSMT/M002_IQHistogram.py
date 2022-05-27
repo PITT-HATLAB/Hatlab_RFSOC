@@ -3,11 +3,11 @@ from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-from helpers.pulseConfig import set_pulse_registers_IQ
+from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
 
-from qubitMSMT.config import config
+from Hatlab_RFSOC.qubitMSMT.config import config
 
-class LoopbackProgram(AveragerProgram):
+class CavityResponseProgram(AveragerProgram):
     def initialize(self):
         cfg = self.cfg
 
@@ -34,28 +34,28 @@ class LoopbackProgram(AveragerProgram):
         # This prevents loop counters from getting incremented before the data is available.
         self.sync_all(self.us2cycles(cfg["relax_delay"]))
 
+if __name__ == "__main__":
+    readout_cfg = {
+        "reps": 20000,  #
+        "readout_length": 1020,  # [clock ticks]
 
-readout_cfg = {
-    "reps": 20000,  #
-    "readout_length": 1020,  # [clock ticks]
+        "res_freq": 90,  # [MHz]
+        # "res_gain": 25000,  # [DAC units]
+        "res_length": 500,  # [clock ticks]
 
-    "res_freq": 90,  # [MHz]
-    # "res_gain": 25000,  # [DAC units]
-    "res_length": 500,  # [clock ticks]
+        "rounds": 1,
+        "relax_delay": 250  # [us]
+    }
 
-    "rounds": 1,
-    "relax_delay": 250  # [us]
-}
+    config = {**config, **readout_cfg}
 
-config = {**config, **readout_cfg}
+    prog = CavityResponseProgram(soccfg, config)
+    avgi, avgq = prog.acquire(soc, load_pulses=True, progress=True, debug=False)
 
-prog = LoopbackProgram(soccfg, config)
-avgi, avgq = prog.acquire(soc, load_pulses=True, progress=True, debug=False)
-
-print("plotting")
-# Plot results.
-fig, ax = plt.subplots()
-hist = ax.hist2d(prog.di_buf[0], prog.dq_buf[0], bins=101)#, range=[[-400, 400], [-400, 400]])
-ax.set_aspect(1)
-fig.colorbar(hist[3])
-plt.show()
+    print("plotting")
+    # Plot results.
+    fig, ax = plt.subplots()
+    hist = ax.hist2d(prog.di_buf[0], prog.dq_buf[0], bins=101)#, range=[[-400, 400], [-400, 400]])
+    ax.set_aspect(1)
+    fig.colorbar(hist[3])
+    plt.show()

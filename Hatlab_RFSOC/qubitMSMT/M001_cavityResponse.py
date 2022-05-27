@@ -3,11 +3,11 @@ from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-from helpers.pulseConfig import set_pulse_registers_IQ
+from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
 
-from qubitMSMT.config import config
+from Hatlab_RFSOC.qubitMSMT.config import config
 
-class LoopbackProgram(AveragerProgram):
+class CavityResponseProgram(AveragerProgram):
     def initialize(self):
         cfg = self.cfg
 
@@ -34,18 +34,18 @@ class LoopbackProgram(AveragerProgram):
         # This prevents loop counters from getting incremented before the data is available.
         self.sync_all(self.us2cycles(cfg["relax_delay"]))
 
+if __name__ == "__main__":
+    prog = CavityResponseProgram(soccfg, config)
+    adc1, = prog.acquire_decimated(soc, load_pulses=True, progress=True, debug=False)
 
-prog = LoopbackProgram(soccfg, config)
-adc1, = prog.acquire_decimated(soc, load_pulses=True, progress=True, debug=False)
-
-print("plotting")
-# Plot results.
-plt.figure()
-ax1 = plt.subplot(111, title=f"Averages = {config['soft_avgs']}", xlabel="Clock ticks",
-                  ylabel="Transmission (adc levels)")
-ax1.plot(adc1[0], label="I value; ADC 0")
-ax1.plot(adc1[1], label="Q value; ADC 0")
-ax1.legend()
+    print("plotting")
+    # Plot results.
+    plt.figure()
+    ax1 = plt.subplot(111, title=f"Averages = {config['soft_avgs']}", xlabel="Clock ticks",
+                      ylabel="Transmission (adc levels)")
+    ax1.plot(adc1[0], label="I value; ADC 0")
+    ax1.plot(adc1[1], label="Q value; ADC 0")
+    ax1.legend()
 
 
 # from Hatlab_DataProcessing.fitter.generic_functions import ExponentialDecayWithCosine

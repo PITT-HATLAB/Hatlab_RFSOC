@@ -1,18 +1,22 @@
+import warnings
+
 from proxy.socProxy import soccfg, soc
 from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-from helpers.pulseConfig import set_pulse_registers_IQ
-from helpers.dataTransfer import saveData
+from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
+from Hatlab_RFSOC.helpers.dataTransfer import saveData
 from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
 
-from qubitMSMT.config import config, rotResult, dataPath, sampleName
+from Hatlab_RFSOC.qubitMSMT.config import config, rotResult, dataPath, sampleName
 
 
 class RamseyProgram(PAveragerProgram):
     def initialize(self):
         cfg = self.cfg
+        if np.abs(cfg["t2r_freq"] - cfg["ge_freq"]) > 5:
+            warnings.warn("Ramsey experiment freq is too far away from qubit ge freq, make sure this is what you really want")
 
         self.q_rp = self.ch_page(self.cfg["qubit_ch"])  # get register page for qubit_ch
         self.r_wait = 3
@@ -62,18 +66,20 @@ class RamseyProgram(PAveragerProgram):
                    soc.us2cycles(self.cfg["step"]))  # update the time between two π/2 pulses
 
 
-expt_cfg={
-    "start":0,  # [us]
-    "step":0.75, # [us]
-    "expts":1000,
-    "reps": 200,
-    "rounds": 1,
-    "relax_delay":500 # [us]
-       }
 
-config.update(expt_cfg) #combine configs
 
 if __name__ == "__main__":
+    expt_cfg = {
+        "start": 0,  # [us]
+        "step": 0.75,  # [us]
+        "expts": 1000,
+        "reps": 200,
+        "rounds": 1,
+        "relax_delay": 500  # [us]
+    }
+
+    config.update(expt_cfg)  # combine configs
+
     print("running...")
     t2p=RamseyProgram(soccfg, config)
     x_pts, avgi, avgq= t2p.acquire(soc, load_pulses=True,progress=True, debug=False)

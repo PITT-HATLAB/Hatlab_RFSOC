@@ -88,7 +88,7 @@ config = {"sig1_ch": 6,  # --Fixed
           # Try varying adc_trig_offset from 100 to 220 clock ticks
 
           "soft_avgs": 300
-          # Try varying soft_avgs from 1 to 200 averages
+          # Try varying soft_avgs from 1 to 200  averages
 
           }
 

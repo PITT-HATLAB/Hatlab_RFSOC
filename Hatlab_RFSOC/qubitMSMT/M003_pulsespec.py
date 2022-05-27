@@ -3,16 +3,16 @@ from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-from helpers.pulseConfig import set_pulse_registers_IQ
+from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
 
-from qubitMSMT.config import config
+from Hatlab_RFSOC.qubitMSMT.config import config
 
 
-class PulseProbeSpectroscopyProgram(PAveragerProgram):
+class PulseSpecProgram(PAveragerProgram):
     def initialize(self):
         cfg = self.cfg
-        self.f_start = soc.freq2reg(expt_cfg["start"])  # get start/step frequencies
-        self.f_step = soc.freq2reg(expt_cfg["step"])
+        self.f_start = soc.freq2reg(cfg["start"])  # get start/step frequencies
+        self.f_step = soc.freq2reg(cfg["step"])
 
 
         self.declare_gen(ch=cfg["qubit_ch"], nqz=cfg["qubit_nzq"])  # qubit drive
@@ -50,27 +50,28 @@ class PulseProbeSpectroscopyProgram(PAveragerProgram):
     def update(self):
         self.mathi(self.q_rp, self.r_freq, self.r_freq, '+', self.f_step)  # update frequency list index
 
-expt_cfg={"start":3794.5, # MHz
-          "step":0.001,
-          "expts":1000,
-          "reps": 200,
-          "rounds":1,
-          "probe_length":soc.us2cycles(5),
-          "qubit_gain":100,
-          "relax_delay": 200 #[us]
-         }
+if __name__ == "__main__":
+    expt_cfg={"start":3794.5, # MHz
+              "step":0.001,
+              "expts":1000,
+              "reps": 200,
+              "rounds":1,
+              "probe_length":soc.us2cycles(5),
+              "qubit_gain":100,
+              "relax_delay": 200 #[us]
+             }
 
 
-config.update(expt_cfg)
+    config.update(expt_cfg)
 
-print("running...")
-qspec=PulseProbeSpectroscopyProgram(soccfg, config)
-expt_pts, avgi, avgq = qspec.acquire(soc, load_pulses=True,progress=True, debug=False)
-print("done...\n plotting...")
+    print("running...")
+    qspec=PulseSpecProgram(soccfg, config)
+    expt_pts, avgi, avgq = qspec.acquire(soc, load_pulses=True,progress=True, debug=False)
+    print("done...\n plotting...")
 
-#Plotting Results
-plt.figure()
-plt.subplot(111,title="Qubit Spectroscopy", xlabel="Qubit Frequency (GHz)", ylabel="Qubit I")
-plt.plot(expt_pts, avgi[0][0],'o-', markersize = 1)
-plt.plot(expt_pts, avgq[0][0],'o-', markersize = 1)
-plt.show()
+    #Plotting Results
+    plt.figure()
+    plt.subplot(111,title="Qubit Spectroscopy", xlabel="Qubit Frequency (GHz)", ylabel="Qubit I")
+    plt.plot(expt_pts, avgi[0][0],'o-', markersize = 1)
+    plt.plot(expt_pts, avgq[0][0],'o-', markersize = 1)
+    plt.show()

@@ -6,7 +6,7 @@ from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-from helpers.pulseConfig import set_pulse_registers_IQ
+from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
 
 
 class CWProgram(AveragerProgram):

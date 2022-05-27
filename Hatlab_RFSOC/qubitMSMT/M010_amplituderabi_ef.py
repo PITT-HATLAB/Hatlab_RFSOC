@@ -5,11 +5,11 @@ import numpy as np
 import lmfit
 from importlib import reload
 
-from helpers.pulseConfig import set_pulse_registers_IQ
-from helpers.dataTransfer import saveData
+from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
+from Hatlab_RFSOC.helpers.dataTransfer import saveData
 from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
 
-from qubitMSMT.config import config, rotResult, dataPath, sampleName
+from Hatlab_RFSOC.qubitMSMT.config import config, rotResult, dataPath, sampleName
 reload(qfr)
 
 class AmplitudeRabiProgram_ef(PAveragerProgram):

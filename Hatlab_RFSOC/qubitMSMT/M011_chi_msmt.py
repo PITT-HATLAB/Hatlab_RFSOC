@@ -5,9 +5,9 @@ import numpy as np
 from tqdm import tqdm
 from helpers.pulseConfig import set_pulse_registers_IQ
 
-from qubitMSMT.config import config, rotResult, dataPath, sampleName
+from Hatlab_RFSOC.qubitMSMT.config import config, rotResult, dataPath, sampleName
 from M004_amplituderabi import AmplitudeRabiProgram
-from helpers.dataTransfer import saveData
+from Hatlab_RFSOC.helpers.dataTransfer import saveData
 from Hatlab_DataProcessing.fitter import cavity_functions_hanger as cfr
 
 from instrumentserver.client import Client

@@ -4,15 +4,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-from helpers.pulseConfig import set_pulse_registers_IQ
-from helpers.dataTransfer import saveData
+from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
+from Hatlab_RFSOC.helpers.dataTransfer import saveData
 from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
 from Hatlab_DataProcessing.analyzer.rotateIQ import RotateData
 
-from qubitMSMT.config import config, rotResult, dataPath, sampleName
+from Hatlab_RFSOC.qubitMSMT.config import config, rotResult, dataPath, sampleName
 
 
-class PulseProbeSpectroscopyProgram_ef(PAveragerProgram):
+class PulseSpecProgram_ef(PAveragerProgram):
     def initialize(self):
         cfg = self.cfg
 
@@ -74,37 +74,37 @@ class PulseProbeSpectroscopyProgram_ef(PAveragerProgram):
         self.mathi(self.q_rp, self.r_freq_ef, self.r_freq_ef, '+', self.f_step)  # update frequency list index
 
 
-expt_cfg = {"start": 3065,  # MHz
-            "step": 0.01,
-            "expts": 1000,
-            "reps": 200,
-            "rounds": 1,
-            "probe_length": soc.us2cycles(5),
-            "qubit_gain_ef": 200,
-            "relax_delay": 300  # [us]
-            }
 
+if __name__ == "__main__":
+    expt_cfg = {"start": 3065,  # MHz
+                "step": 0.01,
+                "expts": 1000,
+                "reps": 200,
+                "rounds": 1,
+                "probe_length": soc.us2cycles(5),
+                "qubit_gain_ef": 200,
+                "relax_delay": 300  # [us]
+                }
+    config.update(expt_cfg)
 
-config.update(expt_cfg)
+    print("running...")
+    qspec=PulseSpecProgram_ef(soccfg, config)
+    expt_pts, avgi, avgq = qspec.acquire(soc, load_pulses=True, progress=True, debug=False)
+    print("done...\nplotting...")
 
-print("running...")
-qspec=PulseProbeSpectroscopyProgram_ef(soccfg, config)
-expt_pts, avgi, avgq = qspec.acquire(soc, load_pulses=True, progress=True, debug=False)
-print("done...\nplotting...")
+    rot=RotateData(expt_pts, avgi[0][0]+1j*avgq[0][0])
+    newIQ = rot.run(rotResult["rot_angle"])
+    newIQ.plot()
 
-rot=RotateData(expt_pts, avgi[0][0]+1j*avgq[0][0])
-newIQ = rot.run(rotResult["rot_angle"])
-newIQ.plot()
+    #Plotting Results
+    plt.figure()
+    plt.subplot(111,title="Qubit Spectroscopy for ef \n(after rotation)", xlabel="Qubit Frequency ef (MHz)", ylabel="Qubit I Q")
+    plt.plot(expt_pts, newIQ.params["q_data"].value,'o-', markersize = 1)
+    plt.plot(expt_pts, newIQ.params["i_data"].value,'o-', markersize = 1)
+    plt.show()
 
-#Plotting Results
-plt.figure()
-plt.subplot(111,title="Qubit Spectroscopy for ef \n(after rotation)", xlabel="Qubit Frequency ef (MHz)", ylabel="Qubit I Q")
-plt.plot(expt_pts, newIQ.params["q_data"].value,'o-', markersize = 1)
-plt.plot(expt_pts, newIQ.params["i_data"].value,'o-', markersize = 1)
-plt.show()
-
-plt.figure()
-plt.subplot(111,title="Qubit Spectroscopy for ef\n(before rotation)", xlabel="Qubit Frequency ef (MHz)", ylabel="Qubit I Q")
-plt.plot(expt_pts, avgi[0][0],'o-', markersize = 1)
-plt.plot(expt_pts, avgq[0][0],'o-', markersize = 1)
-plt.show()
+    plt.figure()
+    plt.subplot(111,title="Qubit Spectroscopy for ef\n(before rotation)", xlabel="Qubit Frequency ef (MHz)", ylabel="Qubit I Q")
+    plt.plot(expt_pts, avgi[0][0],'o-', markersize = 1)
+    plt.plot(expt_pts, avgq[0][0],'o-', markersize = 1)
+    plt.show()
