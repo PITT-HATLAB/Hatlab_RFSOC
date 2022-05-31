@@ -22,6 +22,8 @@ class AmplitudeRabiProgram(PAveragerProgram):
 
         self.q_rp=self.ch_page(self.cfg["qubit_ch"])     # get register page for qubit_ch
         self.r_gain=self.sreg(cfg["qubit_ch"], "gain")   # get gain register for qubit_ch
+        self.r_gain_update = 1 # register for keeping the update value of gain
+
 
         res_freq = self.freq2reg(cfg["res_freq"], gen_ch=cfg["res_ch_I"], ro_ch=cfg["ro_ch"])  # convert frequency to dac frequency (ensuring it is an available adc frequency)
         qubit_freq = soc.freq2reg(cfg["ge_freq"])
@@ -42,18 +44,43 @@ class AmplitudeRabiProgram(PAveragerProgram):
 
     def body(self):
         cfg = self.cfg
+
+        if cfg["prepareWithMSMT"]:
+            self.pulse(ch=self.cfg["qubit_ch"])  # play gaussian pulse
+            self.sync_all(soc.us2cycles(0.05))  # align channels and wait 50ns
+            self.measure(pulse_ch=[cfg["res_ch_I"], cfg["res_ch_Q"]],
+                         adcs=[self.cfg["ro_ch"]],
+                         adc_trig_offset=self.cfg["adc_trig_offset"],
+                         t=0,
+                         wait=True,
+                         syncdelay=self.us2cycles(0.5))
+
+
+        # drive and measure
+        self.mathi(self.q_rp, self.r_gain, self.r_gain_update, '+', 0)  # set the updated gain value
         self.pulse(ch=self.cfg["qubit_ch"])  # play gaussian pulse
         self.sync_all(soc.us2cycles(0.05))  # align channels and wait 50ns
+        self.measure(pulse_ch=[cfg["res_ch_I"], cfg["res_ch_Q"]],
+                     adcs=[self.cfg["ro_ch"]],
+                     adc_trig_offset=self.cfg["adc_trig_offset"],
+                     t=0,
+                     wait=True,
+                     syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
+
+
+        # self.pulse(ch=self.cfg["qubit_ch"])  # play gaussian pulse
+        # self.sync_all(soc.us2cycles(0.05))  # align channels and wait 50ns
         # --- msmt
-        self.trigger([cfg["ro_ch"]], adc_trig_offset=cfg["adc_trig_offset"])  # trigger the adc acquisition
-        self.pulse(ch=cfg["res_ch_I"], t=0)
-        self.pulse(ch=cfg["res_ch_Q"], t=0)
-        self.wait_all()
-        self.sync_all(self.us2cycles(cfg["relax_delay"])) # wait for qubit to relax
+        # self.trigger([cfg["ro_ch"]], adc_trig_offset=cfg["adc_trig_offset"])  # trigger the adc acquisition
+        # self.pulse(ch=cfg["res_ch_I"], t=0)
+        # self.pulse(ch=cfg["res_ch_Q"], t=0)
+        # self.wait_all()
+        # self.sync_all(self.us2cycles(cfg["relax_delay"])) # wait for qubit to relax
+
 
     def update(self):
-        self.mathi(self.q_rp, self.r_gain, self.r_gain, '+', self.cfg["step"])  # update gain of the Gaussian pi pulse
+        self.mathi(self.q_rp, self.r_gain_update, self.r_gain_update, '+', self.cfg["step"])  # update gain of the pulse
 
 if __name__ == "__main__":
     expt_cfg={

@@ -44,13 +44,13 @@ class SweepProgram(PAveragerProgram):
 
 
 
-
+        self.set_pulse_registers(ch=self.cfg["res_ch"], style="const", freq=self.freq, phase=0, length=cfg["length"], gain=0)
         self.trigger([cfg["ro_ch"]], adc_trig_offset=cfg["adc_trig_offset"])  # trigger the adc acquisition
         self.pulse(ch=self.cfg["res_ch"])  #play probe pulse
         self.wait_all()
         self.sync_all(self.us2cycles(1))
 
-        self.set_pulse_registers(ch=self.cfg["res_ch"], style="const", freq=self.freq, phase=0, length=cfg["length"], gain=0)
+        self.mathi(self.r_rp, self.r_gain, self.r_gain_update, '+', 0)  # update gain of the pulse
         self.trigger([cfg["ro_ch"]], adc_trig_offset=cfg["adc_trig_offset"])  # trigger the adc acquisition
         self.pulse(ch=self.cfg["res_ch"])  #play probe pulse
         self.wait_all()
@@ -60,8 +60,8 @@ class SweepProgram(PAveragerProgram):
 
 
     def update(self):
-        self.mathi(self.r_rp, self.r_gain, self.r_gain_update, '+', self.cfg["step"])  # update gain of the pulse
         self.mathi(self.r_rp, self.r_gain_update, self.r_gain_update, '+', self.cfg["step"])  # update gain of the pulse
+
 
 config={"res_ch":6, # --Fixed
         "ro_ch":0, # --Fixed
