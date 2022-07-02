@@ -27,8 +27,8 @@ class PulseSpecProgram_ef(PAveragerProgram):
         self.r_wait = 3
         self.r_freq_ef = 1  # a register to store qubit ef freq
 
-        self.f_start = soc.freq2reg(expt_cfg["start"])  # get start/step frequencies
-        self.f_step = soc.freq2reg(expt_cfg["step"])
+        self.f_start = soc.freq2reg(cfg["start"])  # get start/step frequencies
+        self.f_step = soc.freq2reg(cfg["step"])
         self.safe_regwi(self.q_rp, self.r_freq_ef, self.f_start)
 
 

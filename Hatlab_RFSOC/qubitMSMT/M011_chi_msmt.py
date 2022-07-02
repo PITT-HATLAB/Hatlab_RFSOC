@@ -27,7 +27,7 @@ expt_cfg={
 config = {**config, **expt_cfg}
 
 
-freqList = np.linspace(-1e6, 1e6, 201) + 7.143049e9
+freqList = np.linspace(-1e6, 1e6, 201) + 7.26204058e9
 avgi_array = np.zeros((2, len(freqList)))
 avgq_array = np.zeros((2, len(freqList)))
 

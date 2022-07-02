@@ -23,10 +23,12 @@ class AmplitudeRabiProgram(PAveragerProgram):
         self.q_rp=self.ch_page(self.cfg["qubit_ch"])     # get register page for qubit_ch
         self.r_gain=self.sreg(cfg["qubit_ch"], "gain")   # get gain register for qubit_ch
         self.r_gain_update = 1 # register for keeping the update value of gain
+        self.safe_regwi(self.q_rp, self.r_gain_update, cfg["start"])
 
 
         res_freq = self.freq2reg(cfg["res_freq"], gen_ch=cfg["res_ch_I"], ro_ch=cfg["ro_ch"])  # convert frequency to dac frequency (ensuring it is an available adc frequency)
         qubit_freq = soc.freq2reg(cfg["ge_freq"])
+        self.qubit_freq = qubit_freq
 
         # add qubit and readout pulses to respective channels
         n_sigma = cfg.get("n_sigma", 4)
@@ -44,8 +46,12 @@ class AmplitudeRabiProgram(PAveragerProgram):
 
     def body(self):
         cfg = self.cfg
-
-        if cfg["prepareWithMSMT"]:
+        prepareWithMSMT = cfg.get("prepareWithMSMT", False)
+        #
+        if prepareWithMSMT:
+            self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb", waveform="qubit",
+                                     phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
+                                     freq=self.qubit_freq, gain=cfg["pi2_gain"])
             self.pulse(ch=self.cfg["qubit_ch"])  # play gaussian pulse
             self.sync_all(soc.us2cycles(0.05))  # align channels and wait 50ns
             self.measure(pulse_ch=[cfg["res_ch_I"], cfg["res_ch_Q"]],
@@ -54,8 +60,8 @@ class AmplitudeRabiProgram(PAveragerProgram):
                          t=0,
                          wait=True,
                          syncdelay=self.us2cycles(0.5))
-
-
+        #
+        #
         # drive and measure
         self.mathi(self.q_rp, self.r_gain, self.r_gain_update, '+', 0)  # set the updated gain value
         self.pulse(ch=self.cfg["qubit_ch"])  # play gaussian pulse
@@ -68,10 +74,10 @@ class AmplitudeRabiProgram(PAveragerProgram):
                      syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
 
-
+        # self.mathi(self.q_rp, self.r_gain, self.r_gain_update, '+', 0)  # set the updated gain value
         # self.pulse(ch=self.cfg["qubit_ch"])  # play gaussian pulse
         # self.sync_all(soc.us2cycles(0.05))  # align channels and wait 50ns
-        # --- msmt
+        # # #--- msmt
         # self.trigger([cfg["ro_ch"]], adc_trig_offset=cfg["adc_trig_offset"])  # trigger the adc acquisition
         # self.pulse(ch=cfg["res_ch_I"], t=0)
         # self.pulse(ch=cfg["res_ch_Q"], t=0)
@@ -81,6 +87,7 @@ class AmplitudeRabiProgram(PAveragerProgram):
 
     def update(self):
         self.mathi(self.q_rp, self.r_gain_update, self.r_gain_update, '+', self.cfg["step"])  # update gain of the pulse
+        # self.mathi(self.q_rp, self.r_gain, self.r_gain, '+', self.cfg["step"])  # update gain of the pulse
 
 if __name__ == "__main__":
     expt_cfg={
@@ -94,23 +101,36 @@ if __name__ == "__main__":
 
     print("running...")
     rabi=AmplitudeRabiProgram(soccfg, config)
-    x_pts, avgi, avgq  = rabi.acquire(soc,load_pulses=True,progress=True, debug=False)
-    print("done...\n plotting...")
 
+    if config.get("prepareWithMSMT", False) :
+        x_pts, avgi, avgq = rabi.acquire(soc, load_pulses=True, readouts_per_experiment=2, save_experiments=[0, 1],
+                                         progress=True, debug=False)
+        Idata = rabi.di_buf_p[0]
+        Qdata = rabi.dq_buf_p[0]
 
-    #Plotting Results
-    plt.figure()
-    plt.subplot(111, title= f"Amplitude Rabi, $\sigma={soc.cycles2us(config['sigma'])*1000}$ ns", xlabel="Gain", ylabel="Qubit Population" )
-    plt.plot(x_pts,avgi[0][0],'o-', markersize = 1)
-    plt.plot(x_pts,avgq[0][0],'o-', markersize = 1)
+        from Hatlab_DataProcessing.post_selection.postSelectionProcess import simpleSelection_1Qge
+        g_pct, I_vld, Q_vld, selData = simpleSelection_1Qge(Idata, Qdata, plot=True, xData={"amp": x_pts},
+                                                            selCircleSize=1)
 
-    piPul = qfr.PiPulseTuneUp(x_pts, avgi[0][0]+1j*avgq[0][0])
-    piResult = piPul.run()
-    piResult.plot()
-    piResult.print_ge_rotation()
+        plt.figure()
+        plt.figure("g_pct")
+        plt.plot(x_pts, g_pct)
 
+        piPul = qf.PiPulseTuneUp(x_pts, g_pct)
+        piResult = piPul.run()
+        piResult.plot()
+    else:
+        x_pts, avgi, avgq  = rabi.acquire(soc,load_pulses=True,progress=True, debug=False)
 
-    # ----- save data to pc --------
-    data_temp = {"x_data":x_pts, "i_data": avgi[0][0], "q_data": avgq[0][0]}
-    saveData(data_temp, sampleName+"_pipulse", dataPath)
+        #Plotting Results
+        plt.figure()
+        plt.subplot(111, title= f"Amplitude Rabi, $\sigma={soc.cycles2us(config['sigma'])*1000}$ ns", xlabel="Gain", ylabel="Qubit Population" )
+        plt.plot(x_pts,avgi[0][0],'o-', markersize = 1)
+        plt.plot(x_pts,avgq[0][0],'o-', markersize = 1)
+
+        piPul = qfr.PiPulseTuneUp(x_pts, avgi[0][0]+1j*avgq[0][0])
+        piResult = piPul.run()
+        piResult.plot()
+        piResult.print_ge_rotation()
+
 

@@ -39,13 +39,14 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
         self.pi_gain = int(cfg["pi_gain"])
 
         # add qubit and readout pulses to respective channels
+        n_sigma = cfg.get("n_sigma", 4)
         set_pulse_registers_IQ(self, cfg["res_ch_I"], cfg["res_ch_Q"], cfg["skewPhase"],  cfg["IQScale"],
                                style="const", freq=res_freq, phase=cfg["res_phase"], gain=cfg["res_gain"],
                                 length=cfg["res_length"])
 
 
-        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=cfg["sigma"]*4)
-        self.add_gauss(ch=cfg["qubit_ch"], name="qubit_ef", sigma=cfg["sigma_ef"], length=cfg["sigma_ef"]*4)
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=cfg["sigma"]*cfg["n_sigma"])
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit_ef", sigma=cfg["sigma_ef"], length=cfg["sigma_ef"]*cfg["n_sigma"])
 
         self.sync_all(self.us2cycles(1))  # give processor some time to configure pulses
 
@@ -78,18 +79,19 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
                    self.cfg["step"])  # update gain of the Gaussian pi pulse
 
 
-expt_cfg={
-    "start":-30000,
-        "step":200,
-        "expts":300,
-        "reps": 500,
-        "relax_delay": 400,
-    "prepare_e": True
-       }
-
-config.update(expt_cfg) #combine configs
 
 if __name__ == "__main__":
+    expt_cfg = {
+        "start": -30000,
+        "step": 200,
+        "expts": 300,
+        "reps": 500,
+        "relax_delay": 400,
+        "prepare_e": True
+    }
+
+    config.update(expt_cfg)  # combine configs
+
     print("running...")
     rabi = AmplitudeRabiProgram_ef(soccfg, config)
     x_pts, avgi_e, avgq_e = rabi.acquire(soc, load_pulses=True, progress=True, debug=False)

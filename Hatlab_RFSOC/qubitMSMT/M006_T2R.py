@@ -35,8 +35,8 @@ class RamseyProgram(PAveragerProgram):
 
 
         # add qubit and readout pulses to respective channels
-        # add qubit and readout pulses to respective channels
-        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=cfg["sigma"]*4)
+        n_sigma = cfg.get("n_sigma", 4)
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=cfg["sigma"]*cfg["n_sigma"])
         self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb",waveform="qubit",
                                  phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
                                  freq=qubit_freq, gain=cfg["pi2_gain"])
