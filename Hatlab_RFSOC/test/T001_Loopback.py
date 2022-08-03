@@ -64,7 +64,7 @@ class LoopbackProgram(AveragerProgram):
 #         self.sync_all(self.us2cycles(self.cfg["relax_delay"]))
 
 
-config = {"res_ch": 6,  # --Fixed
+config = {"res_ch": 4,  # --Fixed
           "ro_chs": [0],  # --Fixed
           "reps": 1,  # --Fixed
           "relax_delay": 1.0,  # --us
@@ -80,7 +80,7 @@ config = {"res_ch": 6,  # --Fixed
           "pulse_gain": 3000,  # [DAC units]
           # Try varying pulse_gain from 500 to 30000 DAC units
 
-          "pulse_freq": 100,  # [MHz]
+          "pulse_freq": 1000,  # [MHz]
           # In this program the signal is up and downconverted digitally so you won't see any frequency
           # components in the I/Q traces below. But since the signal gain depends on frequency,
           # if you lower pulse_freq you will see an increased gain.

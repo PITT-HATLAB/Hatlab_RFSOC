@@ -22,9 +22,10 @@ class CWProgram(AveragerProgram):
             "ro_ch"])  # convert frequency to dac frequency (ensuring it is an available adc frequency)
 
         mode = ["oneshot", "periodic"][cfg["out_en"]]
+        stdysel = ["zero", "last"][cfg["out_en"]]
         set_pulse_registers_IQ(self, cfg["res_ch_I"], cfg["res_ch_Q"], cfg["skewPhase"], cfg["IQScale"],
                                style="const", freq=res_freq, phase=cfg["res_phase"], gain=cfg["res_gain"],
-                               length=cfg["res_length"], mode=mode, stdysel="last")
+                               length=cfg["res_length"], mode=mode, stdysel=stdysel)
 
         self.synci(200)  # give processor some time to configure pulses
 
