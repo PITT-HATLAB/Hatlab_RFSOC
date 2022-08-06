@@ -1,10 +1,10 @@
-from proxy.socProxy import soccfg, soc
+from Hatlab_RFSOC.proxy import getSocProxy
 from qick import *
 from qick.averager_program import PAveragerProgram
 import matplotlib.pyplot as plt
 import numpy as np
 
-
+soc, soccfg = getSocProxy()
 
 
 class SweepProgram(PAveragerProgram):

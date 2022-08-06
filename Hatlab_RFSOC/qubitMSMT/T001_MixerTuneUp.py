@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from pprint import pprint
 
-from proxy.socProxy import soccfg, soc
+from Hatlab_RFSOC.proxy import getSocProxy
 from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
@@ -71,6 +71,7 @@ mixerConfig = OrderedDict({
 def manualTune(out_en=1, **kwargs):
     mixerConfig.update(kwargs)
     config = {**hw_cfg, **mixerConfig, **expt_config, "out_en": out_en}
+    soc, soccfg = getSocProxy()
     prog = CWProgram(soccfg, config)
     prog.acquire_round(soc, load_pulses=True, progress=True)
     if config["out_en"] == 0:

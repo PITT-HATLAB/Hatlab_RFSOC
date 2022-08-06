@@ -1,14 +1,8 @@
-from proxy.socProxy import soccfg, soc
 from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
-from Hatlab_RFSOC.helpers.dataTransfer import saveData
-from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
-
-from Hatlab_RFSOC.qubitMSMT.config import config, rotResult, dataPath, sampleName
-
+from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ, declareMuxedGenAndReadout
 
 class AmplitudeRabiProgram(PAveragerProgram):
     def initialize(self):
@@ -32,7 +26,7 @@ class AmplitudeRabiProgram(PAveragerProgram):
 
         # add qubit and readout pulses to respective channels
         n_sigma = cfg.get("n_sigma", 4)
-        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=cfg["sigma"]*cfg["n_sigma"])
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=self.us2cycles(cfg["sigma"]), length=self.us2cycles(cfg["sigma"]*n_sigma))
 
         set_pulse_registers_IQ(self, cfg["res_ch_I"], cfg["res_ch_Q"], cfg["skewPhase"],  cfg["IQScale"],
                                style="const", freq=res_freq, phase=cfg["res_phase"], gain=cfg["res_gain"],
@@ -74,22 +68,90 @@ class AmplitudeRabiProgram(PAveragerProgram):
                      syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
 
-        # self.mathi(self.q_rp, self.r_gain, self.r_gain_update, '+', 0)  # set the updated gain value
-        # self.pulse(ch=self.cfg["qubit_ch"])  # play gaussian pulse
-        # self.sync_all(soc.us2cycles(0.05))  # align channels and wait 50ns
-        # # #--- msmt
-        # self.trigger([cfg["ro_ch"]], adc_trig_offset=cfg["adc_trig_offset"])  # trigger the adc acquisition
-        # self.pulse(ch=cfg["res_ch_I"], t=0)
-        # self.pulse(ch=cfg["res_ch_Q"], t=0)
-        # self.wait_all()
-        # self.sync_all(self.us2cycles(cfg["relax_delay"])) # wait for qubit to relax
+    def update(self):
+        self.mathi(self.q_rp, self.r_gain_update, self.r_gain_update, '+', self.cfg["step"])  # update gain of the pulse
+        # self.mathi(self.q_rp, self.r_gain, self.r_gain, '+', self.cfg["step"])  # update gain of the pulse
+
+
+
+class MuxedAmplitudeRabiProgram(PAveragerProgram):
+    def initialize(self):
+        cfg = self.cfg
+
+        # declare muxed generator and readout channels
+        declareMuxedGenAndReadout(self, cfg["res_ch"], cfg["res_nqz"], cfg["res_mixer_freq"],
+                                  cfg["res_freqs"], cfg["res_gains"], cfg["ro_chs"], cfg["readout_length"])
+
+        # set readout pulse registers
+        self.set_pulse_registers(ch=cfg["res_ch"], style="const", length=cfg["res_length"], mask=[0, 1, 2, 3])
+
+        # set / config qubit DAC channel
+        qubit_mixer_freq = cfg.get("qubit_mixer_freq", 0)
+        self.declare_gen(ch=cfg["qubit_ch"], mixer_freq=qubit_mixer_freq, nqz=cfg["qubit_nqz"])  # qubit drive
+
+        self.q_rp=self.ch_page(self.cfg["qubit_ch"])     # get register page for qubit_ch
+        self.r_gain=self.sreg(cfg["qubit_ch"], "gain")   # get gain register for qubit_ch
+        self.r_gain_update = 1 # register for keeping the update value of gain
+        self.safe_regwi(self.q_rp, self.r_gain_update, cfg["start"])
+
+        self.qubit_freq = self.freq2reg(cfg["ge_freq"])
+
+        # add qubit pulses to respective channels
+        n_sigma = cfg.get("n_sigma", 4)
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=self.us2cycles(cfg["sigma"]), length=self.us2cycles(cfg["sigma"]*n_sigma))
+
+        self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb",waveform="qubit",
+                                 phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
+                                 freq=self.qubit_freq, gain=cfg["start"])
+
+        self.sync_all(self.us2cycles(1))  # give processor some time to configure pulses
+
+    def body(self):
+        cfg = self.cfg
+        prepareWithMSMT = cfg.get("prepareWithMSMT", False)
+        #
+        if prepareWithMSMT:
+            self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb", waveform="qubit",
+                                     phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
+                                     freq=self.qubit_freq, gain=cfg["pi2_gain"])
+            self.pulse(ch=self.cfg["qubit_ch"])  # play gaussian pulse
+            self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
+            self.measure(pulse_ch=self.cfg["res_ch"],
+                         adcs=self.ro_chs,
+                         pins=[0],
+                         adc_trig_offset=self.cfg["adc_trig_offset"],
+                         wait=True,
+                         syncdelay=self.us2cycles(self.cfg["relax_delay"]))
+        #
+        #
+        # drive and measure
+        self.mathi(self.q_rp, self.r_gain, self.r_gain_update, '+', 0)  # set the updated gain value
+        self.pulse(ch=self.cfg["qubit_ch"])  # play gaussian pulse
+        self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
+        # --- msmt
+        self.measure(pulse_ch=self.cfg["res_ch"],
+                     adcs=self.ro_chs,
+                     pins=[0],
+                     adc_trig_offset=self.cfg["adc_trig_offset"],
+                     wait=True,
+                     syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
 
     def update(self):
         self.mathi(self.q_rp, self.r_gain_update, self.r_gain_update, '+', self.cfg["step"])  # update gain of the pulse
         # self.mathi(self.q_rp, self.r_gain, self.r_gain, '+', self.cfg["step"])  # update gain of the pulse
 
+
+
+
+
 if __name__ == "__main__":
+    from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
+    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, rotResult, dataPath, sampleName, PyroServer
+    from Hatlab_RFSOC.proxy import getSocProxy
+    from Hatlab_RFSOC.helpers.dataTransfer import saveData
+    soc, soccfg = getSocProxy(PyroServer)
+
     expt_cfg={
         "start":-30000,
         "step":200,
@@ -100,6 +162,7 @@ if __name__ == "__main__":
     config.update(expt_cfg) #combine configs
 
     print("running...")
+
     rabi=AmplitudeRabiProgram(soccfg, config)
 
     if config.get("prepareWithMSMT", False) :

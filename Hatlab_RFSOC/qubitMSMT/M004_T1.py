@@ -1,26 +1,13 @@
-import warnings
-
-from proxy.socProxy import soccfg, soc
 from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 
 from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
-from Hatlab_RFSOC.helpers.dataTransfer import saveData
-from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
-
-from Hatlab_RFSOC.qubitMSMT.config import config, rotResult, dataPath, sampleName
 
 
-class RamseyProgram(PAveragerProgram):
+class T1Program(PAveragerProgram):
     def initialize(self):
         cfg = self.cfg
-        if np.abs(cfg["t2r_freq"] - cfg["ge_freq"]) > 5:
-            warnings.warn("Ramsey experiment freq is too far away from qubit ge freq, make sure this is what you really want")
-
-        self.q_rp = self.ch_page(self.cfg["qubit_ch"])  # get register page for qubit_ch
-        self.r_wait = 3
-        self.regwi(self.q_rp, self.r_wait, soc.us2cycles(cfg["start"]))
 
         self.declare_gen(ch=cfg["qubit_ch"], nqz=cfg["qubit_nzq"])  # qubit drive
         self.declare_gen(ch=cfg["res_ch_I"], nqz=cfg["res_nzq_I"])  # resonator drive I
@@ -29,21 +16,23 @@ class RamseyProgram(PAveragerProgram):
         self.declare_readout(ch=cfg["ro_ch"], length=cfg["readout_length"], freq=cfg["res_freq"],
                              gen_ch=cfg["res_ch_I"])
 
+        self.q_rp = self.ch_page(self.cfg["qubit_ch"])  # get register page for qubit_ch
+        self.r_wait = 3
+        self.regwi(self.q_rp, self.r_wait, soc.us2cycles(cfg["start"]))
 
         res_freq = self.freq2reg(cfg["res_freq"], gen_ch=cfg["res_ch_I"], ro_ch=cfg["ro_ch"])  # convert frequency to dac frequency (ensuring it is an available adc frequency)
-        qubit_freq = soc.freq2reg(cfg["t2r_freq"])
-
+        qubit_freq = soc.freq2reg(cfg["ge_freq"])
 
         # add qubit and readout pulses to respective channels
         n_sigma = cfg.get("n_sigma", 4)
-        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=cfg["sigma"]*cfg["n_sigma"])
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=self.us2cycles(cfg["sigma"]*n_sigma))
         self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb",waveform="qubit",
                                  phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
-                                 freq=qubit_freq, gain=cfg["pi2_gain"])
+                                 freq=qubit_freq, gain=cfg["pi_gain"])
         set_pulse_registers_IQ(self, cfg["res_ch_I"], cfg["res_ch_Q"], cfg["skewPhase"],  cfg["IQScale"],
                                style="const", freq=res_freq, phase=cfg["res_phase"], gain=cfg["res_gain"],
                                 length=cfg["res_length"])
-        self.sync_all(self.us2cycles(0.2))
+        self.sync_all(self.us2cycles(500))
 
     def body(self):
         cfg = self.cfg
@@ -51,8 +40,6 @@ class RamseyProgram(PAveragerProgram):
         self.pulse(ch=self.cfg["qubit_ch"])  #play probe pulse
         self.sync_all()
         self.sync(self.q_rp,self.r_wait)
-        self.pulse(ch=self.cfg["qubit_ch"])  #play probe pulse
-        self.sync_all(self.us2cycles(0.05))
 
         # --- msmt
         self.trigger([cfg["ro_ch"]], adc_trig_offset=cfg["adc_trig_offset"])  # trigger the adc acquisition
@@ -63,41 +50,41 @@ class RamseyProgram(PAveragerProgram):
 
     def update(self):
         self.mathi(self.q_rp, self.r_wait, self.r_wait, '+',
-                   soc.us2cycles(self.cfg["step"]))  # update the time between two π/2 pulses
-
-
+                   soc.us2cycles(self.cfg["step"]))  # update frequency list index
 
 
 if __name__ == "__main__":
+    from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
+    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, rotResult, dataPath, sampleName, PyroServer
+    from Hatlab_RFSOC.proxy import getSocProxy
+    from Hatlab_RFSOC.helpers.dataTransfer import saveData
+    soc, soccfg = getSocProxy(PyroServer)
+
     expt_cfg = {
         "start": 0,  # [us]
-        "step": 0.75,  # [us]
-        "expts": 1000,
+        "step": 1,  # [us]
+        "expts": 450,
         "reps": 200,
-        "rounds": 1,
-        "relax_delay": 500  # [us]
+        "relax_delay": 300,
     }
-
     config.update(expt_cfg)  # combine configs
 
     print("running...")
-    t2p=RamseyProgram(soccfg, config)
-    x_pts, avgi, avgq= t2p.acquire(soc, load_pulses=True,progress=True, debug=False)
+    t1p=T1Program(soccfg, config)
+    x_pts, avgi, avgq = t1p.acquire(soc, load_pulses=True, progress=True, debug=False)
     print("done...\n plotting...")
 
 
     #Plotting Results
     plt.figure()
-    plt.subplot(111, title="Ramsey Fringe Experiment", xlabel="Delay time ($\mu$s)", ylabel="Qubit Population")
+    plt.subplot(111, title="T1 Experiment", xlabel=f"Time ($\mu s$)", ylabel="Qubit Population")
     plt.plot(x_pts,avgi[0][0],'o-')
     plt.plot(x_pts,avgq[0][0],'o-')
 
-    t2Ramsey = qfr.T2Ramsey(x_pts, avgi[0][0]+1j*avgq[0][0])
-    t2rResult = t2Ramsey.run(rotResult)
-    t2rResult.plot()
-
-
+    t1Decay = qfr.T1Decay(x_pts, avgi[0][0]+1j*avgq[0][0])
+    t1Result = t1Decay.run(rotResult)
+    t1Result.plot()
 
     # ----- save data to pc --------
     data_temp = {"x_data":x_pts, "i_data": avgi[0][0], "q_data": avgq[0][0]}
-    saveData(data_temp, sampleName+"_t2r", dataPath)
+    saveData(data_temp, sampleName+"_t1", dataPath)

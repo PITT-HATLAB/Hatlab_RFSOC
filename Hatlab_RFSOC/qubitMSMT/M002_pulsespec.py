@@ -1,11 +1,8 @@
-from proxy.socProxy import soccfg, soc
 from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
-
-from Hatlab_RFSOC.qubitMSMT.config import config
+from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ, declareMuxedGenAndReadout
 
 
 class PulseSpecProgram(PAveragerProgram):
@@ -50,7 +47,56 @@ class PulseSpecProgram(PAveragerProgram):
     def update(self):
         self.mathi(self.q_rp, self.r_freq, self.r_freq, '+', self.f_step)  # update frequency list index
 
+
+class MuxedPulseSpecProgram(PAveragerProgram):
+    def initialize(self):
+        cfg = self.cfg
+
+        # declare muxed generator and readout channels
+        declareMuxedGenAndReadout(self, cfg["res_ch"], cfg["res_nqz"], cfg["res_mixer_freq"],
+                                  cfg["res_freqs"], cfg["res_gains"], cfg["ro_chs"], cfg["readout_length"])
+
+        # set readout pulse registers
+        self.set_pulse_registers(ch=cfg["res_ch"], style="const", length=cfg["res_length"], mask=[0, 1, 2, 3])
+
+        # set / config qubit DAC channel
+        qubit_mixer_freq = cfg.get("qubit_mixer_freq", 0)
+        self.declare_gen(ch=cfg["qubit_ch"], mixer_freq=qubit_mixer_freq, nqz=cfg["qubit_nqz"])  # qubit drive
+
+        self.f_start = self.freq2reg(cfg["start"])  # get start/step frequencies
+        self.f_step = self.freq2reg(cfg["step"])
+
+        self.q_rp=self.ch_page(self.cfg["qubit_ch"])     # get register page for qubit_ch
+        self.r_freq=self.sreg(cfg["qubit_ch"], "freq")   # get frequency register for qubit_ch
+
+        self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="const", length=self.cfg["probe_length"],
+                                 phase=0, freq=self.f_start, gain=cfg["qubit_gain"])
+
+        self.sync_all(self.us2cycles(1))  # give processor some time to configure pulses
+
+    def body(self):
+        cfg = self.cfg
+        self.pulse(ch=self.cfg["qubit_ch"])  # play probe pulse
+        self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
+
+        # --- msmt
+        self.measure(pulse_ch=self.cfg["res_ch"],
+                     adcs=self.ro_chs,
+                     pins=[0],
+                     adc_trig_offset=self.cfg["adc_trig_offset"],
+                     wait=True,
+                     syncdelay=self.us2cycles(self.cfg["relax_delay"]))
+
+    def update(self):
+        self.mathi(self.q_rp, self.r_freq, self.r_freq, '+', self.f_step)  # update frequency list index
+
+
+
 if __name__ == "__main__":
+    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, PyroServer
+    from Hatlab_RFSOC.proxy import getSocProxy
+    soc, soccfg = getSocProxy(PyroServer)
+
     expt_cfg={"start":3794.5, # MHz
               "step":0.001,
               "expts":1000,

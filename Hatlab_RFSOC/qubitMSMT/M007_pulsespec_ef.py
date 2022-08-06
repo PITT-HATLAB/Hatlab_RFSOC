@@ -1,15 +1,8 @@
-from proxy.socProxy import soccfg, soc
 from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
-from Hatlab_RFSOC.helpers.dataTransfer import saveData
-from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
-from Hatlab_DataProcessing.analyzer.rotateIQ import RotateData
-
-from Hatlab_RFSOC.qubitMSMT.config import config, rotResult, dataPath, sampleName
 
 
 class PulseSpecProgram_ef(PAveragerProgram):
@@ -40,7 +33,8 @@ class PulseSpecProgram_ef(PAveragerProgram):
         set_pulse_registers_IQ(self, cfg["res_ch_I"], cfg["res_ch_Q"], cfg["skewPhase"],  cfg["IQScale"],
                                style="const", freq=res_freq, phase=cfg["res_phase"], gain=cfg["res_gain"],
                                 length=cfg["res_length"])
-        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=cfg["sigma"]*4)
+        n_sigma = cfg.get("n_sigma", 4)
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=self.us2cycles(cfg["sigma"]*n_sigma))
         self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb",waveform="qubit",
                                  phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
                                  freq=self.qubit_freq, gain=cfg["pi_gain"])
@@ -76,6 +70,14 @@ class PulseSpecProgram_ef(PAveragerProgram):
 
 
 if __name__ == "__main__":
+    from Hatlab_RFSOC.helpers.dataTransfer import saveData
+    from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
+    from Hatlab_DataProcessing.analyzer.rotateIQ import RotateData
+
+    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, rotResult, dataPath, sampleName, PyroServer
+    from Hatlab_RFSOC.proxy import getSocProxy
+    soc, soccfg = getSocProxy(PyroServer)
+
     expt_cfg = {"start": 3065,  # MHz
                 "step": 0.01,
                 "expts": 1000,

@@ -1,16 +1,9 @@
-from proxy.socProxy import soccfg, soc
 from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
-import lmfit
-from importlib import reload
 
 from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
-from Hatlab_RFSOC.helpers.dataTransfer import saveData
-from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
 
-from Hatlab_RFSOC.qubitMSMT.config import config, rotResult, dataPath, sampleName
-reload(qfr)
 
 class AmplitudeRabiProgram_ef(PAveragerProgram):
     def initialize(self):
@@ -44,9 +37,9 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
                                style="const", freq=res_freq, phase=cfg["res_phase"], gain=cfg["res_gain"],
                                 length=cfg["res_length"])
 
-
-        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=cfg["sigma"]*cfg["n_sigma"])
-        self.add_gauss(ch=cfg["qubit_ch"], name="qubit_ef", sigma=cfg["sigma_ef"], length=cfg["sigma_ef"]*cfg["n_sigma"])
+        n_sigma = cfg.get("n_sigma", 4)
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=self.us2cycles(cfg["sigma"]*n_sigma))
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit_ef", sigma=cfg["sigma_ef"], length=self.us2cycles(cfg["sigma"]*n_sigma))
 
         self.sync_all(self.us2cycles(1))  # give processor some time to configure pulses
 
@@ -81,6 +74,13 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
 
 
 if __name__ == "__main__":
+    from Hatlab_RFSOC.helpers.dataTransfer import saveData
+    from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
+    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, rotResult, dataPath, sampleName, PyroServer
+    from Hatlab_RFSOC.proxy import getSocProxy
+    import lmfit
+    soc, soccfg = getSocProxy(PyroServer)
+
     expt_cfg = {
         "start": -30000,
         "step": 200,

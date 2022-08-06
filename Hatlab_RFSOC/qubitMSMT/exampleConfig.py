@@ -1,4 +1,4 @@
-from proxy.socProxy import soccfg, soc
+PyroServer = "myqick216-01"
 
 hw_cfg={"res_ch_I": 5,
         "res_ch_Q": 6,
@@ -28,9 +28,9 @@ readout_cfg = {
 }
 
 qubit_cfg={
-    "sigma": soc.us2cycles(0.15),
+    "sigma": 0.15, # us
     "ge_freq":3219.63343149,
-    "sigma_ef": soc.us2cycles(0.15),
+    "sigma_ef": 0.15, # us
     "t2r_freq":3795.02,
     "ef_freq":3073.54,
     "pi_gain": 12882,

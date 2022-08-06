@@ -1,12 +1,14 @@
-from proxy.socProxy import soccfg, soc
+# todo: write this as a function or class
+
+from Hatlab_RFSOC.proxy import getSocProxy
 from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 from helpers.pulseConfig import set_pulse_registers_IQ
 
-from Hatlab_RFSOC.qubitMSMT.config import config, rotResult, dataPath, sampleName
-from M004_amplituderabi import AmplitudeRabiProgram
+from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, rotResult, dataPath, sampleName, PyroServer
+from M003_amplituderabi import AmplitudeRabiProgram
 from Hatlab_RFSOC.helpers.dataTransfer import saveData
 from Hatlab_DataProcessing.fitter import cavity_functions_hanger as cfr
 
@@ -15,6 +17,7 @@ from instrumentserver.client import Client
 cli = Client()
 SC_C = cli.get_instrument("SC_C")
 
+soc, soccfg = getSocProxy(PyroServer)
 
 expt_cfg={
     "start":0,
