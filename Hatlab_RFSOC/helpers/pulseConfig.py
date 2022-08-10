@@ -1,5 +1,53 @@
+import numpy as np
 from qick.qick_asm import QickProgram
 from typing import List, Literal
+
+
+def tanh_box(length: int, ramp_width: int, cut_offset=0.01, maxv=30000):
+    """
+    Create a numpy array containing a smooth box pulse made of two tanh functions subtract from each other.
+
+    :param length: Length of array (in points)
+    :param ramp_width: number of points from cutOffset to 0.95 amplitude
+    :param cut_offset: the initial offset to cut on the tanh Function
+    :return:
+    """
+    x = np.arange(0, length)
+    c0_ = np.arctanh(2 * cut_offset - 1)
+    c1_ = np.arctanh(2 * 0.95 - 1)
+    k_ = (c1_ - c0_) / ramp_width
+    y = (0.5 * (np.tanh(k_ * x + c0_) - np.tanh(k_ * (x - length) - c0_)) - cut_offset) / (1 - cut_offset) * maxv
+    return y
+
+
+def add_tanh(prog: QickProgram, ch, name, length, ramp_width, cut_offset=0.01, maxv=None):
+    """Adds a smooth box pulse made of two tanh functions to the waveform library.
+    The pulse will peak at length/2.
+
+    Parameters
+    ----------
+    ch : int
+        DAC channel (index in 'gens' list)
+    name : str
+        Name of the pulse
+    length : int
+        Total pulse length (in units of fabric clocks)
+    ramp_width : int
+        Number of points from cut_offset to 0.95 amplitude (in units of fabric clocks)
+    cut_offset: float
+        the initial offset to cut on the tanh Function (in unit of unit-height pulse)
+    maxv : float
+        Value at the peak (if None, the max value for this generator will be used)
+
+    """
+    gencfg = prog.soccfg['gens'][ch]
+    if maxv is None: maxv = gencfg['maxv'] * gencfg['maxv_scale']
+    samps_per_clk = gencfg['samps_per_clk']
+
+    length = np.round(length) * samps_per_clk
+    ramp_width *= samps_per_clk
+
+    prog.add_pulse(ch, name, idata=tanh_box(length, ramp_width, cut_offset, maxv=maxv))
 
 
 def set_pulse_registers_IQ(prog: QickProgram, ch_I, ch_Q, skewPhase, IQScale, **kwargs):
@@ -45,4 +93,3 @@ def declareMuxedGenAndReadout(prog: QickProgram, res_ch: int, res_nqz: Literal[1
     for iCh, ch in enumerate(ro_chs):
         prog.declare_readout(ch=ch, freq=res_freqs[iCh], length=readout_length,
                              gen_ch=res_ch)
-

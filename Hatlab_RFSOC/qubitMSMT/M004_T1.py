@@ -2,7 +2,7 @@ from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
+from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ, declareMuxedGenAndReadout
 
 
 class T1Program(PAveragerProgram):
@@ -18,10 +18,10 @@ class T1Program(PAveragerProgram):
 
         self.q_rp = self.ch_page(self.cfg["qubit_ch"])  # get register page for qubit_ch
         self.r_wait = 3
-        self.regwi(self.q_rp, self.r_wait, soc.us2cycles(cfg["start"]))
+        self.regwi(self.q_rp, self.r_wait, self.us2cycles(cfg["start"]))
 
         res_freq = self.freq2reg(cfg["res_freq"], gen_ch=cfg["res_ch_I"], ro_ch=cfg["ro_ch"])  # convert frequency to dac frequency (ensuring it is an available adc frequency)
-        qubit_freq = soc.freq2reg(cfg["ge_freq"])
+        qubit_freq = self.freq2reg(cfg["ge_freq"], gen_ch=cfg["qubit_ch"])
 
         # add qubit and readout pulses to respective channels
         n_sigma = cfg.get("n_sigma", 4)
@@ -50,7 +50,58 @@ class T1Program(PAveragerProgram):
 
     def update(self):
         self.mathi(self.q_rp, self.r_wait, self.r_wait, '+',
-                   soc.us2cycles(self.cfg["step"]))  # update frequency list index
+                   self.us2cycles(self.cfg["step"]))  # update frequency list index
+
+
+class MuxedT1Program(PAveragerProgram):
+    def initialize(self):
+        cfg = self.cfg
+
+        # declare muxed generator and readout channels
+        declareMuxedGenAndReadout(self, cfg["res_ch"], cfg["res_nqz"], cfg["res_mixer_freq"],
+                                  cfg["res_freqs"], cfg["res_gains"], cfg["ro_chs"], cfg["readout_length"])
+
+        # set readout pulse registers
+        self.set_pulse_registers(ch=cfg["res_ch"], style="const", length=cfg["res_length"], mask=[0, 1, 2, 3])
+
+        # set / config qubit DAC channel
+        qubit_mixer_freq = cfg.get("qubit_mixer_freq", 0)
+        self.declare_gen(ch=cfg["qubit_ch"], mixer_freq=qubit_mixer_freq, nqz=cfg["qubit_nqz"])  # qubit drive
+
+        self.q_rp = self.ch_page(self.cfg["qubit_ch"])  # get register page for qubit_ch
+        self.r_wait = 3
+        self.regwi(self.q_rp, self.r_wait, self.us2cycles(cfg["start"]))
+
+        qubit_freq = self.freq2reg(cfg["ge_freq"], gen_ch=cfg["qubit_ch"])
+
+        # add qubit and readout pulses to respective channels
+        n_sigma = cfg.get("n_sigma", 4)
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=self.us2cycles(cfg["sigma"]), length=self.us2cycles(cfg["sigma"]*n_sigma))
+
+        self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb",waveform="qubit",
+                                 phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
+                                 freq=qubit_freq, gain=cfg["pi_gain"])
+
+        self.sync_all(self.us2cycles(1))
+
+    def body(self):
+        cfg = self.cfg
+
+        self.pulse(ch=self.cfg["qubit_ch"])  #play probe pulse
+        self.sync_all()
+        self.sync(self.q_rp,self.r_wait)
+
+        # --- msmt
+        self.measure(pulse_ch=self.cfg["res_ch"],
+                     adcs=self.ro_chs,
+                     pins=[0],
+                     adc_trig_offset=self.cfg["adc_trig_offset"],
+                     wait=True,
+                     syncdelay=self.us2cycles(self.cfg["relax_delay"]))
+
+    def update(self):
+        self.mathi(self.q_rp, self.r_wait, self.r_wait, '+', self.us2cycles(self.cfg["step"]))  # update frequency list index
+
 
 
 if __name__ == "__main__":

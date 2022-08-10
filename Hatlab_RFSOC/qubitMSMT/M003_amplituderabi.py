@@ -21,7 +21,7 @@ class AmplitudeRabiProgram(PAveragerProgram):
 
 
         res_freq = self.freq2reg(cfg["res_freq"], gen_ch=cfg["res_ch_I"], ro_ch=cfg["ro_ch"])  # convert frequency to dac frequency (ensuring it is an available adc frequency)
-        qubit_freq = soc.freq2reg(cfg["ge_freq"])
+        qubit_freq = self.freq2reg(cfg["ge_freq"])
         self.qubit_freq = qubit_freq
 
         # add qubit and readout pulses to respective channels
@@ -47,7 +47,7 @@ class AmplitudeRabiProgram(PAveragerProgram):
                                      phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
                                      freq=self.qubit_freq, gain=cfg["pi2_gain"])
             self.pulse(ch=self.cfg["qubit_ch"])  # play gaussian pulse
-            self.sync_all(soc.us2cycles(0.05))  # align channels and wait 50ns
+            self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
             self.measure(pulse_ch=[cfg["res_ch_I"], cfg["res_ch_Q"]],
                          adcs=[self.cfg["ro_ch"]],
                          adc_trig_offset=self.cfg["adc_trig_offset"],
@@ -59,7 +59,7 @@ class AmplitudeRabiProgram(PAveragerProgram):
         # drive and measure
         self.mathi(self.q_rp, self.r_gain, self.r_gain_update, '+', 0)  # set the updated gain value
         self.pulse(ch=self.cfg["qubit_ch"])  # play gaussian pulse
-        self.sync_all(soc.us2cycles(0.05))  # align channels and wait 50ns
+        self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
         self.measure(pulse_ch=[cfg["res_ch_I"], cfg["res_ch_Q"]],
                      adcs=[self.cfg["ro_ch"]],
                      adc_trig_offset=self.cfg["adc_trig_offset"],
@@ -94,7 +94,7 @@ class MuxedAmplitudeRabiProgram(PAveragerProgram):
         self.r_gain_update = 1 # register for keeping the update value of gain
         self.safe_regwi(self.q_rp, self.r_gain_update, cfg["start"])
 
-        self.qubit_freq = self.freq2reg(cfg["ge_freq"])
+        self.qubit_freq = self.freq2reg(cfg["ge_freq"], gen_ch=cfg["qubit_ch"])
 
         # add qubit pulses to respective channels
         n_sigma = cfg.get("n_sigma", 4)

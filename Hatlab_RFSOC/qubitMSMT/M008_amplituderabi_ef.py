@@ -26,8 +26,8 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
 
         res_freq = self.freq2reg(cfg["res_freq"], gen_ch=cfg["res_ch_I"], ro_ch=cfg[
             "ro_ch"])  # convert frequency to dac frequency (ensuring it is an available adc frequency)
-        self.qubit_freq_ge = soc.freq2reg(cfg["ge_freq"])
-        self.qubit_freq_ef = soc.freq2reg(cfg["ef_freq"])
+        self.qubit_freq_ge = self.freq2reg(cfg["ge_freq"], gen_ch=cfg["qubit_ch"])
+        self.qubit_freq_ef = self.freq2reg(cfg["ef_freq"], gen_ch=cfg["qubit_ch"])
 
         self.pi_gain = int(cfg["pi_gain"])
 
@@ -38,8 +38,8 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
                                 length=cfg["res_length"])
 
         n_sigma = cfg.get("n_sigma", 4)
-        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=cfg["sigma"], length=self.us2cycles(cfg["sigma"]*n_sigma))
-        self.add_gauss(ch=cfg["qubit_ch"], name="qubit_ef", sigma=cfg["sigma_ef"], length=self.us2cycles(cfg["sigma"]*n_sigma))
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit", sigma=self.us2cycles(cfg["sigma"]), length=self.us2cycles(cfg["sigma"]*n_sigma))
+        self.add_gauss(ch=cfg["qubit_ch"], name="qubit_ef", sigma=self.us2cycles(cfg["sigma_ef"]), length=self.us2cycles(cfg["sigma"]*n_sigma))
 
         self.sync_all(self.us2cycles(1))  # give processor some time to configure pulses
 
@@ -50,7 +50,7 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
                                      phase=self.deg2reg(90, gen_ch=cfg["qubit_ch"]),
                                      freq=self.qubit_freq_ge, gain=cfg["pi_gain"])
             self.pulse(ch=self.cfg["qubit_ch"])  # play ge gaussian pulse
-            self.sync_all(soc.us2cycles(0.05))  # align channels and wait 50ns
+            self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
 
 
         self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="arb", waveform="qubit_ef",
@@ -58,7 +58,7 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
                                  freq=self.qubit_freq_ef, gain=self.gain_start)
         self.mathi(self.q_rp, self.r_gain, self.r_gain_ef, '+', 0)  # update gain list index
         self.pulse(ch=self.cfg["qubit_ch"])  # play ef gaussian pulse
-        self.sync_all(soc.us2cycles(0.05)) # align channels and wait 50ns
+        self.sync_all(self.us2cycles(0.05)) # align channels and wait 50ns
 
         # --- msmt
         self.trigger([cfg["ro_ch"]], adc_trig_offset=cfg["adc_trig_offset"])  # trigger the adc acquisition

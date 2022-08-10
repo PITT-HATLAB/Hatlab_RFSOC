@@ -8,8 +8,8 @@ from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ, declareMuxe
 class PulseSpecProgram(PAveragerProgram):
     def initialize(self):
         cfg = self.cfg
-        self.f_start = soc.freq2reg(cfg["start"])  # get start/step frequencies
-        self.f_step = soc.freq2reg(cfg["step"])
+        self.f_start = self.freq2reg(cfg["start"], gen_ch=cfg["qubit_ch"])  # get start/step frequencies
+        self.f_step = self.freq2reg(cfg["step"], gen_ch=cfg["qubit_ch"])
 
 
         self.declare_gen(ch=cfg["qubit_ch"], nqz=cfg["qubit_nzq"])  # qubit drive
@@ -27,7 +27,7 @@ class PulseSpecProgram(PAveragerProgram):
                                style="const", freq=res_freq, phase=cfg["res_phase"], gain=cfg["res_gain"],
                                 length=cfg["res_length"])
 
-        self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="const", length=self.cfg["probe_length"],
+        self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="const", length=soc.us2cycles(self.cfg["probe_length"]),
                                  phase=0, freq=self.f_start, gain=cfg["qubit_gain"])
 
         self.sync_all(self.us2cycles(1))  # give processor some time to configure pulses
@@ -35,7 +35,7 @@ class PulseSpecProgram(PAveragerProgram):
     def body(self):
         cfg = self.cfg
         self.pulse(ch=self.cfg["qubit_ch"])  # play probe pulse
-        self.sync_all(soc.us2cycles(0.05))  # align channels and wait 50ns
+        self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
 
         # --- msmt
         self.trigger([cfg["ro_ch"]], adc_trig_offset=cfg["adc_trig_offset"])  # trigger the adc acquisition
@@ -63,13 +63,13 @@ class MuxedPulseSpecProgram(PAveragerProgram):
         qubit_mixer_freq = cfg.get("qubit_mixer_freq", 0)
         self.declare_gen(ch=cfg["qubit_ch"], mixer_freq=qubit_mixer_freq, nqz=cfg["qubit_nqz"])  # qubit drive
 
-        self.f_start = self.freq2reg(cfg["start"])  # get start/step frequencies
-        self.f_step = self.freq2reg(cfg["step"])
+        self.f_start = self.freq2reg(cfg["start"], gen_ch=cfg["qubit_ch"])  # get start/step frequencies
+        self.f_step = self.freq2reg(cfg["step"], gen_ch=cfg["qubit_ch"])
 
         self.q_rp=self.ch_page(self.cfg["qubit_ch"])     # get register page for qubit_ch
         self.r_freq=self.sreg(cfg["qubit_ch"], "freq")   # get frequency register for qubit_ch
 
-        self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="const", length=self.cfg["probe_length"],
+        self.set_pulse_registers(ch=self.cfg["qubit_ch"], style="const", length=soc.us2cycles(self.cfg["probe_length"]),
                                  phase=0, freq=self.f_start, gain=cfg["qubit_gain"])
 
         self.sync_all(self.us2cycles(1))  # give processor some time to configure pulses
@@ -102,7 +102,7 @@ if __name__ == "__main__":
               "expts":1000,
               "reps": 200,
               "rounds":1,
-              "probe_length":soc.us2cycles(5),
+              "probe_length":5,
               "qubit_gain":100,
               "relax_delay": 200 #[us]
              }

@@ -37,3 +37,7 @@ def plotIQHist2d(di_buf, dq_buf, ro_chs=None, bins=101):
 
     plt.tight_layout()
     
+def plotIQpcolormesh(xdata, ydata, idata, qdata):
+    fig, axs = plt.subplots(1,2,figsize=(8,5))
+    axs[0].pcolormesh(xdata, ydata, idata.T, shading="auto")
+    axs[1].pcolormesh(xdata, ydata, qdata.T, shading="auto")
