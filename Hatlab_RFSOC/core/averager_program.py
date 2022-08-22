@@ -50,7 +50,6 @@ class QickRegister():
         self.prog.safe_regwi(self.page, self.addr, self.val2reg(self.init_val))
 
 
-
 class QickSweep():
     def __init__(self, prog:QickProgram, reg:QickRegister, start, stop, expts:int):
         self.prog = prog
@@ -65,6 +64,7 @@ class QickSweep():
         self.prog.mathi(self.reg.page, self.reg.addr, self.reg.addr, '+', self.reg_step)  # update gain of the pulse
     def reset(self):
         self.reg.reset()
+
 
 class PAveragerProgram(QickProgram):
     """
@@ -84,7 +84,7 @@ class PAveragerProgram(QickProgram):
         self._user_regs = [] # all user defined registers
         self.declare_all_gens()
         self.declare_all_readouts()
-
+        self.expts = cfg.get("expts", 1) #todo: this could cause bugs that are hard to track when expts is mistakently specified in NDAveragerProgram,or forget to specify in PAveragerProgram
         self.make_program()
 
 
@@ -277,7 +277,7 @@ class PAveragerProgram(QickProgram):
         :return: Numpy array of experiment points
         :rtype: np.array
         """
-        return self.cfg["start"]+np.arange(self.cfg['expts'])*self.cfg["step"]
+        return self.cfg["start"]+np.arange(self.expts)*self.cfg["step"]
 
     def acquire_round(self, soc, threshold=None, angle=None,  readouts_per_experiment=1, save_experiments=None, load_pulses=True, start_src="internal", progress=False, debug=False):
         """
@@ -329,7 +329,7 @@ class PAveragerProgram(QickProgram):
         # configure tproc for internal/external start
         soc.start_src(start_src)
 
-        reps, expts = self.cfg['reps'], self.cfg['expts']
+        reps, expts = self.cfg['reps'], self.expts
 
         count = 0
         total_count = reps*expts*readouts_per_experiment
@@ -434,7 +434,7 @@ class PAveragerProgram(QickProgram):
             - avg_di (:py:class:`list`) - list of lists of averaged accumulated I data for ADCs 0 and 1
             - avg_dq (:py:class:`list`) - list of lists of averaged accumulated Q data for ADCs 0 and 1
         """
-        reps, expts, rounds = self.cfg['reps'], self.cfg['expts'], self.cfg.get("rounds", 1)
+        reps, expts, rounds = self.cfg['reps'], self.expts, self.cfg.get("rounds", 1)
         msmt_per_rep = expts * readouts_per_experiment
         tot_reps = reps * rounds
         total_msmt = msmt_per_rep * tot_reps
@@ -527,6 +527,11 @@ class NDAveragerProgram(PAveragerProgram):
         """
         pass
 
+    def add_sweep(self, sweep: QickSweep):
+        print("!!!!!!!!!!!!!!!!", self.expts)
+        self.qick_sweeps.append(sweep)
+        self.expts *= sweep.expts
+
 
     def make_program(self):
         """
@@ -574,7 +579,8 @@ class NDAveragerProgram(PAveragerProgram):
         :return: Numpy array of experiment points
         :rtype: np.array
         """
-        return np.linspace(self.cfg["start"], self.cfg["stop"], self.cfg['expts'])
+        # return np.linspace(self.cfg["start"], self.cfg["stop"], self.expts)
+        return None
 
 
 
