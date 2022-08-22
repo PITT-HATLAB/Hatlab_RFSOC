@@ -70,7 +70,7 @@ def set_pulse_registers_IQ(prog: QickProgram, ch_I, ch_Q, skewPhase, IQScale, **
 
 
 def declareMuxedGenAndReadout(prog: QickProgram, res_ch: int, res_nqz: Literal[1, 2], res_mixer_freq: float,
-                              res_freqs: float, res_gains: List[float], ro_chs: List[int], readout_length: int):
+                              res_freqs: List[float], res_gains: List[float], ro_chs: List[int], readout_length: int):
     """ declare muxed generator and readout channels
     :param prog: qick program for which the channels will be declared
     :param res_ch: DAC channel for resonator

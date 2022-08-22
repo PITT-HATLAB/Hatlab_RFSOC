@@ -5,6 +5,11 @@ import json
 import numpy as np
 
 HOMEPATH = "/home/xilinx"
+""" This package was written for transferring data from RFSoC to local PC.
+We probably don't need this function if we run codes with Pyro 
+
+"""
+
 
 # def saveData(data:Dict, fileName, filePath):
 #     df = pd.DataFrame(data)  
