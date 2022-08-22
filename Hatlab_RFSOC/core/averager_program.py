@@ -9,7 +9,8 @@ from Hatlab_RFSOC.core.pulses import add_gaussian, add_tanh
 RegisterTypes= Literal["freq", "time", "phase", "adc_freq"]
 
 class QickRegister():
-    def __init__(self, prog, page:int, addr:int, reg_type:RegisterTypes=None, gen_ch=None, ro_ch=None, init_val=None):
+    def __init__(self, prog, page:int, addr:int, reg_type:RegisterTypes=None,
+                 gen_ch:int=None, ro_ch:int=None, init_val=None, name:str=None):
         self.prog = prog
         self.page = page
         self.addr = addr
@@ -17,6 +18,7 @@ class QickRegister():
         self.gen_ch = gen_ch
         self.ro_ch = ro_ch
         self.init_val = init_val
+        self.name=name
         if init_val is not None:
             self.reset()
 
@@ -30,7 +32,7 @@ class QickRegister():
         elif self.type == "adc_freq":
             return self.prog.freq2reg_adc(val, self.ro_ch, self.gen_ch)
         else:
-            return val
+            return np.int32(val)
 
     def reg2val(self, reg):
         if self.type == "freq":
@@ -48,6 +50,21 @@ class QickRegister():
         self.prog.safe_regwi(self.page, self.addr, self.val2reg(self.init_val))
 
 
+
+class QickSweep():
+    def __init__(self, prog:QickProgram, reg:QickRegister, start, stop, expts:int):
+        self.prog = prog
+        self.reg = reg
+        self.start = start
+        self.stop = stop
+        self.expts = expts
+        step_val = (stop - start) / (expts - 1)
+        self.reg_step = reg.val2reg(step_val)
+        self.init_val = start
+    def update(self):
+        self.prog.mathi(self.reg.page, self.reg.addr, self.reg.addr, '+', self.reg_step)  # update gain of the pulse
+    def reset(self):
+        self.reg.reset()
 
 class PAveragerProgram(QickProgram):
     """
@@ -97,21 +114,6 @@ class PAveragerProgram(QickProgram):
             self.declare_readout(**kws)
 
 
-
-    # def initialize_gen(self, gen_ch:str): #todo: what am I doing here???
-    #     """
-    #     initialize a generator using the parameters in the config dict
-    #     :param gen_ch: name of generator channel
-    #     :return:
-    #     """
-    #     gen_cgf = self.cfg["gen_chs"][gen_ch]
-    #     mixer_freq = gen_cgf.get("mixer_freq", 0)
-    #     mux_freqs = gen_cgf.get("mux_freqs")
-    #     mux_gains = gen_cgf.get("mux_gains")
-    #     ro_ch = gen_cgf.get("ro_ch")
-    #     self.declare_gen(gen_cgf["ch"], gen_cgf["nqz"], mixer_freq, mux_freqs, mux_gains, ro_ch)
-
-
     def get_reg(self, gen_ch:str, name:str) -> QickRegister:
         """
         get a qick generator register page and its address
@@ -123,7 +125,7 @@ class PAveragerProgram(QickProgram):
         page = self.ch_page(gen_cgf["ch"])
         addr = self.sreg(gen_cgf["ch"], name)
         reg_type = name if name in RegisterTypes.__args__ else None
-        reg = QickRegister(self, page, addr, reg_type, gen_cgf["ch"], gen_cgf.get("ro_ch"))
+        reg = QickRegister(self, page, addr, reg_type, gen_cgf["ch"], gen_cgf.get("ro_ch"), name=f"{gen_ch}_{name}")
         return reg
 
     def new_reg(self, gen_ch:str, name:str=None, init_val=None, reg_type:RegisterTypes=None) -> QickRegister:
@@ -151,7 +153,7 @@ class PAveragerProgram(QickProgram):
         if name in self.user_reg_dict[gen_ch].keys():
             raise KeyError(f"register name '{name}' already exists for channel {gen_ch}")
 
-        reg = QickRegister(self, page, addr, reg_type, gen_cgf["ch"], gen_cgf.get("ro_ch"), init_val)
+        reg = QickRegister(self, page, addr, reg_type, gen_cgf["ch"], gen_cgf.get("ro_ch"), init_val, name=name)
         self.user_reg_dict[gen_ch][name] = reg
 
         return reg
@@ -232,6 +234,7 @@ class PAveragerProgram(QickProgram):
         Abstract method for updating the program
         """
         pass
+
 
     def make_program(self):
         """
@@ -471,7 +474,7 @@ class PAveragerProgram(QickProgram):
 
     def declareMuxedGenAndReadout(self, res_ch: int, res_nqz: Literal[1, 2], res_mixer_freq: float,
                                   res_freqs: List[float], res_gains: List[float], ro_chs: List[int],
-                                  readout_length: int):
+                                  readout_length: int): #todo: to be removed
         """ declare muxed generator and readout channels
         :param res_ch: DAC channel for resonator
         :param res_nqz: resonator DAC nyquist zone, should consider mixer_freq+res_freqs
@@ -493,3 +496,85 @@ class PAveragerProgram(QickProgram):
         for iCh, ch in enumerate(ro_chs):
             self.declare_readout(ch=ch, freq=res_freqs[iCh], length=readout_length,
                                  gen_ch=res_ch)
+
+
+
+class NDAveragerProgram(PAveragerProgram):
+    """
+    NDAveragerProgram class, for qubit experiments that sweep over multiple variables.
+
+    :param cfg: Configuration dictionary
+    :type cfg: dict
+    """
+
+    def __init__(self, soccfg, cfg):
+        """
+        Constructor for the RAveragerProgram, calls make program at the end so for classes that inherit from this if you want it to do something before the program is made and compiled either do it before calling this __init__ or put it in the initialize method.
+        """
+        self.qick_sweeps:List[QickSweep] = []
+        super().__init__(soccfg, cfg)
+
+
+    def initialize(self):
+        """
+        Abstract method for initializing the program and can include any instructions that are executed once at the beginning of the program.
+        """
+        pass
+
+    def body(self):
+        """
+        Abstract method for the body of the program
+        """
+        pass
+
+
+    def make_program(self):
+        """
+        A template program which repeats the instructions defined in the body() method the number of times specified in self.cfg["reps"].
+        """
+        p = self
+
+        rcount = 13 # total run count
+        rep_count = 14 # repetition counter
+
+        p.initialize()  # initialize only run once at the very beginning
+        n_sweeps = len(self.qick_sweeps)
+        counter_regs = (np.arange(n_sweeps)+15).tolist() # not sure why this has to be a list (np.array doesn't work)...
+        if counter_regs[-1] > 21:
+            raise OverflowError(f"too many qick inner loops ({n_sweeps}), run out of counter registers")
+
+        p.regwi(0, rcount, 0) # reset total run count
+
+        p.regwi(0, rep_count, self.cfg["reps"] - 1) # set repetition count
+        p.label("LOOP_rep")
+
+        for creg, swp in zip(counter_regs[::-1], self.qick_sweeps[::-1]):
+            swp.reset()
+            p.regwi(0, creg, swp.expts-1)
+            p.label(f"LOOP_{swp.reg.name if swp.reg.name is not None else creg}")
+
+        p.body()
+        p.mathi(0, rcount, rcount, "+", 1)
+        p.memwi(0, rcount, 1)
+
+        for creg, swp in zip(counter_regs, self.qick_sweeps):
+            swp.update()
+            p.loopnz(0, creg, f"LOOP_{swp.reg.name if swp.reg.name is not None else creg}")
+
+        p.loopnz(0, rep_count, 'LOOP_rep')
+
+        p.end()
+
+
+
+    def get_expt_pts(self):
+        """
+        Method for calculating experiment points (for x-axis of plots) based on the config.
+
+        :return: Numpy array of experiment points
+        :rtype: np.array
+        """
+        return np.linspace(self.cfg["start"], self.cfg["stop"], self.cfg['expts'])
+
+
+
