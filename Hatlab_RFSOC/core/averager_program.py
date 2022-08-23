@@ -6,11 +6,16 @@ from qick.qick_asm import QickProgram
 
 from Hatlab_RFSOC.core.pulses import add_gaussian, add_tanh
 
-RegisterTypes= Literal["freq", "time", "phase", "adc_freq"]
+RegisterTypes = Literal["freq", "time", "phase", "adc_freq"]
+
 
 class QickRegister():
-    def __init__(self, prog, page:int, addr:int, reg_type:RegisterTypes=None,
-                 gen_ch:int=None, ro_ch:int=None, init_val=None, name:str=None):
+    """
+    todo: write me
+    """
+
+    def __init__(self, prog, page: int, addr: int, reg_type: RegisterTypes = None,
+                 gen_ch: int = None, ro_ch: int = None, init_val=None, name: str = None):
         self.prog = prog
         self.page = page
         self.addr = addr
@@ -18,7 +23,7 @@ class QickRegister():
         self.gen_ch = gen_ch
         self.ro_ch = ro_ch
         self.init_val = init_val
-        self.name=name
+        self.name = name
         if init_val is not None:
             self.reset()
 
@@ -26,7 +31,10 @@ class QickRegister():
         if self.type == "freq":
             return self.prog.freq2reg(val, self.gen_ch, self.ro_ch)
         elif self.type == "time":
-            return self.prog.us2cycles(val, self.gen_ch, self.ro_ch)
+            if self.gen_ch is not None:
+                return self.prog.us2cycles(val, self.gen_ch)
+            else:
+                return self.prog.us2cycles(val, self.gen_ch, self.ro_ch)
         elif self.type == "phase":
             return self.prog.deg2reg(val, self.gen_ch)
         elif self.type == "adc_freq":
@@ -38,7 +46,10 @@ class QickRegister():
         if self.type == "freq":
             return self.prog.reg2freq(reg, self.gen_ch)
         elif self.type == "time":
-            return self.prog.cycles2us(reg, self.gen_ch, self.ro_ch)
+            if self.gen_ch is not None:
+                return self.prog.cycles2us(reg, self.gen_ch)
+            else:
+                return self.prog.cycles2us(reg, self.gen_ch, self.ro_ch)
         elif self.type == "phase":
             return self.prog.reg2deg(reg, self.gen_ch)
         elif self.type == "adc_freq":
@@ -51,7 +62,11 @@ class QickRegister():
 
 
 class QickSweep():
-    def __init__(self, prog:QickProgram, reg:QickRegister, start, stop, expts:int):
+    """
+    todo: write me
+    """
+
+    def __init__(self, prog: QickProgram, reg: QickRegister, start, stop, expts: int):
         self.prog = prog
         self.reg = reg
         self.start = start
@@ -60,65 +75,81 @@ class QickSweep():
         step_val = (stop - start) / (expts - 1)
         self.reg_step = reg.val2reg(step_val)
         self.init_val = start
+
     def update(self):
         self.prog.mathi(self.reg.page, self.reg.addr, self.reg.addr, '+', self.reg_step)  # update gain of the pulse
+
     def reset(self):
         self.reg.reset()
 
 
-class PAveragerProgram(QickProgram):
+class APAveragerProgram(QickProgram):
     """
-    NDAveragerProgram class, for qubit experiments that sweep over multiple variables.
+    APAveragerProgram class. "A" and "P" stands for "Automatic" and "Physical". This class automatically declares the
+    generator and readout channels using the parameters provided in cfg["gen_chs"] and cfg["ro_chs"], and contains
+    functions that hopefully can make it easier to program pulse sequences with parameters in their physical units
+    (so that we don't have to constantly call "_2reg"/"_2cycles" functions).
+    The "acquire" methods are copied from qick.RAveragerProgram.
 
-    :param cfg: Configuration dictionary
-    :type cfg: dict
+    config requirements:
+    "gen_chs" = dictionary that contains the configuration of each generator channel;
+        The format should be: {"gen_name": {**kwargs_of_declare_gen}}
+    "ro_chs" = dictionary that contains the configuration of each readout channel;
+        The format should be: {"ro_name": {**kwargs_of_declare_readout}}
+    "waveforms"(optional) =  dictionary that contains some waveforms and their parameters (in physical units)
+        The format should be: {"waveform_name": {**kwargs_of_add_waveform}}
     """
 
     def __init__(self, soccfg, cfg):
         """
-        Constructor for the RAveragerProgram, calls make program at the end so for classes that inherit from this if you want it to do something before the program is made and compiled either do it before calling this __init__ or put it in the initialize method.
+        Initialize the QickProgram and automatically declares all generator and readout channels in cfg["gen_chs"] and
+        cfg["ro_chs"]
         """
         super().__init__(soccfg)
         self.cfg = cfg
-        self.user_reg_dict={} # look up dict for registers defined for each channel
-        self._user_regs = [] # all user defined registers
+        self.user_reg_dict = {}  # look up dict for registers defined in each generator channel
+        self._user_regs = []  # (page, addr) of all user defined registers
+        self.expts = None  # abstract variable for total number of experiments in each repetition.
         self.declare_all_gens()
         self.declare_all_readouts()
-        self.expts = cfg.get("expts", 1) #todo: this could cause bugs that are hard to track when expts is mistakently specified in NDAveragerProgram,or forget to specify in PAveragerProgram
-        self.make_program()
-
 
     def declare_all_gens(self):
         """
-        initialize all generators in the config dict
+        Declare all generators in the config dict based on the items specified in cfg["gen_chs"].
+
         :return:
         """
         for gen_ch, kws in self.cfg["gen_chs"].items():
             if ("ch_I" in kws) and ("ch_Q" in kws):
                 ch_i = kws.pop("ch_I")
                 ch_q = kws.pop("ch_Q")
-                for arg in ["skew_phase","IQ_scale"]:
+                for arg in ["skew_phase", "IQ_scale"]:
                     try:
                         kws.pop(arg)
                     except AttributeError:
                         pass
                 self.declare_gen(ch_i, **kws)
-                self.declare_gen(ch_q, **kws) # todo: all the other functions doesn't support IQ channel gen yet...
+                self.declare_gen(ch_q, **kws)  # todo: all the other functions doesn't support IQ channel gen yet...
             else:
                 self.declare_gen(**kws)
             self.user_reg_dict[gen_ch] = {}
 
-
     def declare_all_readouts(self):
+        """
+        Declare all readout channels in the config dict based on the items specified in cfg["ro_chs"].
+
+        :return:
+        """
         for ro_ch, kws in self.cfg["ro_chs"].items():
             self.declare_readout(**kws)
 
-
-    def get_reg(self, gen_ch:str, name:str) -> QickRegister:
+    def get_reg(self, gen_ch: str, name: str) -> QickRegister:
         """
-        get a qick generator register page and its address
-        :param gen_ch:
-        :param name:  name of the qick register. as in QickProgram.pulse_registers
+        Gets tProc register page and address associated with gen_ch and register name. Creates a QickRegister object for
+        return.
+
+        :param gen_ch: name of the generator channel, as in cfg["gen_chs"]
+        :param name:  name of the qick register, as in QickProgram.pulse_registers
         :return: QickRegister
         """
         gen_cgf = self.cfg["gen_chs"][gen_ch]
@@ -128,12 +159,13 @@ class PAveragerProgram(QickProgram):
         reg = QickRegister(self, page, addr, reg_type, gen_cgf["ch"], gen_cgf.get("ro_ch"), name=f"{gen_ch}_{name}")
         return reg
 
-    def new_reg(self, gen_ch:str, name:str=None, init_val=None, reg_type:RegisterTypes=None) -> QickRegister:
+    def new_reg(self, gen_ch: str, name: str = None, init_val=None, reg_type: RegisterTypes = None) -> QickRegister:
         """
-        declare a new register in the generator register page. address automatically adds 1 one when each time a new
+        Declare a new register in the generator register page. Address automatically adds 1 one when each time a new
         register in the same page is declared.
-        :param gen_ch: generator channel
-        :param name: name of the new register, only for keeping records in self.user_reg_dict
+
+        :param gen_ch: name of the generator channel, as in cfg["gen_chs"]
+        :param name: name of the new register. Optional.
         :param init_val: initial value for the register, when reg_type is provided, the reg_val should be in the unit
             of the corresponding type.
         "param reg_type: type of the register, e.g. freq, time, phase
@@ -158,7 +190,7 @@ class PAveragerProgram(QickProgram):
 
         return reg
 
-    def set_pulse_params(self, gen_ch:str, **kwargs):
+    def set_pulse_params(self, gen_ch: str, **kwargs):
         """
         This is a wrapper of the QickProgram.set_pulse_registers. Instead of taking register values, this function takes
         the physical values of the pulse parameters. E.g. freq in MHz, length in us, phase in degree.
@@ -201,9 +233,20 @@ class PAveragerProgram(QickProgram):
         self.set_pulse_registers(gen_cgf["ch"], **kw_reg)
 
     def add_waveform(self, gen_ch, name, shape, **kwargs):
+        """
+        Add waveform to a generator channel based on parameters specified in cfg["waveforms"]
+
+        :param gen_ch: name of the generator channel, as in cfg["gen_chs"]
+        :param name: name of the waveform.
+        :param shape: shape of the waveform, should be one of the waveforms that are available in pulses.py
+        :param kwargs: kwargs for the pulse
+
+        :return:
+        """
+
         # todo: the parser can be better... instead of using if commands to select from only two possible waveforms here
         #   We should have a abstract waveform class. each new waveform should be written as a waveform class instance,
-        #   and the parser should search for waveform in pulses.py
+        #   and the parser should search for waveform in pulses.py (rename that to waveforms.py)
 
         if shape == "gaussian":
             add_gaussian(self, gen_ch, name, **kwargs)
@@ -212,74 +255,25 @@ class PAveragerProgram(QickProgram):
         else:
             raise NameError(f"unsupported pulse shape {shape}")
 
-    def add_waveform_from_cfg(self, gen_ch, name):
+    def add_waveform_from_cfg(self, gen_ch: str, name: str):
+        """
+        Add waveform to a generator channel based on parameters specified in cfg["waveforms"]
+
+        :param gen_ch: name of the generator channel, as in cfg["gen_chs"]
+        :param name: name of the waveform, as in cfg["waveforms"]
+        :return:
+        """
         pulse_params = self.cfg["waveforms"][name]
         self.add_waveform(gen_ch, name, **pulse_params)
 
-
-    def initialize(self):
-        """
-        Abstract method for initializing the program and can include any instructions that are executed once at the beginning of the program.
-        """
-        pass
-
-    def body(self):
-        """
-        Abstract method for the body of the program
-        """
-        pass
-
-    def update(self):
-        """
-        Abstract method for updating the program
-        """
-        pass
-
-
-    def make_program(self):
-        """
-        A template program which repeats the instructions defined in the body() method the number of times specified in self.cfg["reps"].
-        """
-        p = self
-
-        rcount = 13
-        rii = 14
-        rjj = 15
-
-
-        p.regwi(0, rcount, 0)
-
-        p.regwi(0, rjj, self.cfg["reps"]-1)
-        p.label("LOOP_J")
-
-        p.initialize()
-        p.regwi(0, rii, self.cfg["expts"]-1)
-        p.label("LOOP_I")
-
-        p.body()
-
-        p.mathi(0, rcount, rcount, "+", 1)
-        p.update()
-
-        p.memwi(0, rcount, 1)
-
-        p.loopnz(0, rii, "LOOP_I")
-
-        p.loopnz(0, rjj, 'LOOP_J')
-
-
-        p.end()
-
     def get_expt_pts(self):
         """
-        Method for calculating experiment points (for x-axis of plots) based on the config.
-
-        :return: Numpy array of experiment points
-        :rtype: np.array
+        Abstract method for calculating total experiment points in each repetition based on the config.
         """
-        return self.cfg["start"]+np.arange(self.expts)*self.cfg["step"]
+        pass
 
-    def acquire_round(self, soc, threshold=None, angle=None,  readouts_per_experiment=1, save_experiments=None, load_pulses=True, start_src="internal", progress=False, debug=False):
+    def acquire_round(self, soc, threshold=None, angle=None, readouts_per_experiment=1, save_experiments=None,
+                      load_pulses=True, start_src="internal", progress=False, debug=False):
         """
         This method optionally loads pulses on to the SoC, configures the ADC readouts, loads the machine code representation of the AveragerProgram onto the SoC, starts the program and streams the data into the Python, returning it as a set of numpy arrays.
 
@@ -332,7 +326,7 @@ class PAveragerProgram(QickProgram):
         reps, expts = self.cfg['reps'], self.expts
 
         count = 0
-        total_count = reps*expts*readouts_per_experiment
+        total_count = reps * expts * readouts_per_experiment
         n_ro = len(self.ro_chs)
 
         d_buf = np.zeros((n_ro, 2, total_count))
@@ -341,18 +335,18 @@ class PAveragerProgram(QickProgram):
         with tqdm(total=total_count, disable=not progress) as pbar:
             soc.start_readout(total_count, counter_addr=1, ch_list=list(
                 self.ro_chs), reads_per_count=readouts_per_experiment)
-            while count<total_count:
+            while count < total_count:
                 new_data = soc.poll_data()
                 for d, s in new_data:
                     new_points = d.shape[2]
-                    d_buf[:, :, count:count+new_points] = d
+                    d_buf[:, :, count:count + new_points] = d
                     count += new_points
                     self.stats.append(s)
                     pbar.update(new_points)
 
         # reformat the data into separate I and Q arrays
-        di_buf = d_buf[:,0,:]
-        dq_buf = d_buf[:,1,:]
+        di_buf = d_buf[:, 0, :]
+        dq_buf = d_buf[:, 1, :]
 
         # save results to class in case you want to look at it later or for analysis
         self.di_buf = di_buf
@@ -371,12 +365,12 @@ class PAveragerProgram(QickProgram):
             for i_ch, (ch, ro) in enumerate(self.ro_chs.items()):
                 if threshold is None:
                     avg_di[i_ch][nn] = np.sum(di_buf[i_ch][ii::readouts_per_experiment].reshape(
-                        (reps, expts)), 0)/(reps)/ro.length
+                        (reps, expts)), 0) / (reps) / ro.length
                     avg_dq[i_ch][nn] = np.sum(dq_buf[i_ch][ii::readouts_per_experiment].reshape(
-                        (reps, expts)), 0)/(reps)/ro.length
+                        (reps, expts)), 0) / (reps) / ro.length
                 else:
                     avg_di[i_ch][nn] = np.sum(
-                        self.shots[i_ch][ii::readouts_per_experiment].reshape((reps, expts)), 0)/(reps)
+                        self.shots[i_ch][ii::readouts_per_experiment].reshape((reps, expts)), 0) / (reps)
                     avg_dq = np.zeros(avg_di.shape)
 
         return expt_pts, avg_di, avg_dq
@@ -403,9 +397,12 @@ class PAveragerProgram(QickProgram):
             angle = [0, 0]
         if type(threshold) is int:
             threshold = [threshold, threshold]
-        return np.array([np.heaviside((di[i]*np.cos(angle[i]) - dq[i]*np.sin(angle[i]))/self.ro_chs[ch].length-threshold[i], 0) for i, ch in enumerate(self.ro_chs)])
+        return np.array([np.heaviside(
+            (di[i] * np.cos(angle[i]) - dq[i] * np.sin(angle[i])) / self.ro_chs[ch].length - threshold[i], 0) for i, ch
+            in enumerate(self.ro_chs)])
 
-    def acquire(self, soc, threshold=None, angle=None, load_pulses=True, readouts_per_experiment=1, save_experiments=None, start_src="internal", progress=False, debug=False):
+    def acquire(self, soc, threshold=None, angle=None, load_pulses=True, readouts_per_experiment=1,
+                save_experiments=None, start_src="internal", progress=False, debug=False):
         """
         This method optionally loads pulses on to the SoC, configures the ADC readouts, loads the machine code representation of the AveragerProgram onto the SoC, starts the program and streams the data into the Python, returning it as a set of numpy arrays.
         config requirements:
@@ -449,15 +446,20 @@ class PAveragerProgram(QickProgram):
         if save_experiments is None:
             save_experiments = [0]
         if "rounds" not in self.cfg or self.cfg["rounds"] == 1:
-            expt_pts, avg_di, avg_dq = self.acquire_round(soc, threshold=threshold, angle=angle, readouts_per_experiment=readouts_per_experiment, save_experiments=save_experiments, load_pulses=load_pulses, start_src=start_src, progress=progress, debug=debug)
+            expt_pts, avg_di, avg_dq = self.acquire_round(soc, threshold=threshold, angle=angle,
+                                                          readouts_per_experiment=readouts_per_experiment,
+                                                          save_experiments=save_experiments, load_pulses=load_pulses,
+                                                          start_src=start_src, progress=progress, debug=debug)
             self.di_buf_p = self.di_buf.reshape(n_ro, reps, -1)
             self.dq_buf_p = self.dq_buf.reshape(n_ro, reps, -1)
             return expt_pts, avg_di, avg_dq
 
         avg_di = None
-        for ii in tqdm(range(self.cfg["rounds"]), disable=not progress):
-            expt_pts, avg_di0, avg_dq0 = self.acquire_round(soc, threshold=threshold, angle=angle, readouts_per_experiment=readouts_per_experiment,
-                                                            save_experiments=save_experiments, load_pulses=load_pulses, start_src=start_src, progress=progress, debug=debug)
+        for ii in tqdm(range(rounds), disable=not progress):
+            expt_pts, avg_di0, avg_dq0 = self.acquire_round(soc, threshold=threshold, angle=angle,
+                                                            readouts_per_experiment=readouts_per_experiment,
+                                                            save_experiments=save_experiments, load_pulses=load_pulses,
+                                                            start_src=start_src, progress=progress, debug=debug)
 
             if avg_di is None:
                 avg_di, avg_dq = avg_di0, avg_dq0
@@ -468,40 +470,12 @@ class PAveragerProgram(QickProgram):
             self.di_buf_p[:, reps * ii: reps * (ii + 1), :] = self.di_buf.reshape(n_ro, reps, -1)
             self.dq_buf_p[:, reps * ii: reps * (ii + 1), :] = self.dq_buf.reshape(n_ro, reps, -1)
 
-        return expt_pts, avg_di/self.cfg["rounds"], avg_dq/self.cfg["rounds"]
+        return expt_pts, avg_di / self.cfg["rounds"], avg_dq / self.cfg["rounds"]
 
 
-
-    def declareMuxedGenAndReadout(self, res_ch: int, res_nqz: Literal[1, 2], res_mixer_freq: float,
-                                  res_freqs: List[float], res_gains: List[float], ro_chs: List[int],
-                                  readout_length: int): #todo: to be removed
-        """ declare muxed generator and readout channels
-        :param res_ch: DAC channel for resonator
-        :param res_nqz: resonator DAC nyquist zone, should consider mixer_freq+res_freqs
-        :param res_mixer_freq: LO freq for digital up conversion (DUC) of the DAC channel
-        :param res_freqs: DAC waveform frequencies for each muxed channel (IF of DUC)
-        :param res_gains: gains of each muxed channel, float numbers between [-1, 1]
-        :param ro_chs: ADC channels for readout
-        :param readout_length: ADC readout length. In clock cycles
-
-        :return:
-        """
-
-        # configure DACs
-        self.declare_gen(ch=res_ch, nqz=res_nqz, mixer_freq=res_mixer_freq,
-                         mux_freqs=res_freqs,
-                         ro_ch=ro_chs[0], mux_gains=res_gains)
-
-        # configure the readout lengths and downconversion frequencies
-        for iCh, ch in enumerate(ro_chs):
-            self.declare_readout(ch=ch, freq=res_freqs[iCh], length=readout_length,
-                                 gen_ch=res_ch)
-
-
-
-class NDAveragerProgram(PAveragerProgram):
+class NDAveragerProgram(APAveragerProgram):
     """
-    NDAveragerProgram class, for qubit experiments that sweep over multiple variables.
+    NDAveragerProgram class, for qubit experiments that sweep over multiple variables in qick.
 
     :param cfg: Configuration dictionary
     :type cfg: dict
@@ -509,11 +483,12 @@ class NDAveragerProgram(PAveragerProgram):
 
     def __init__(self, soccfg, cfg):
         """
-        Constructor for the RAveragerProgram, calls make program at the end so for classes that inherit from this if you want it to do something before the program is made and compiled either do it before calling this __init__ or put it in the initialize method.
+        Constructor for the NDAveragerProgram. Make the ND sweep asm commands.
         """
-        self.qick_sweeps:List[QickSweep] = []
         super().__init__(soccfg, cfg)
-
+        self.qick_sweeps: List[QickSweep] = []
+        self.expts = 1
+        self.make_program()
 
     def initialize(self):
         """
@@ -528,59 +503,64 @@ class NDAveragerProgram(PAveragerProgram):
         pass
 
     def add_sweep(self, sweep: QickSweep):
-        print("!!!!!!!!!!!!!!!!", self.expts)
+        """
+        todo: write me
+        :param sweep:
+        :return:
+        """
         self.qick_sweeps.append(sweep)
         self.expts *= sweep.expts
 
-
     def make_program(self):
         """
-        A template program which repeats the instructions defined in the body() method the number of times specified in self.cfg["reps"].
+        todo:write me
         """
         p = self
 
-        rcount = 13 # total run count
-        rep_count = 14 # repetition counter
-
         p.initialize()  # initialize only run once at the very beginning
+
+        rcount = 13  # total run counter
+        rep_count = 14  # repetition counter
+
         n_sweeps = len(self.qick_sweeps)
-        counter_regs = (np.arange(n_sweeps)+15).tolist() # not sure why this has to be a list (np.array doesn't work)...
+        counter_regs = (
+                np.arange(n_sweeps) + 15).tolist()  # not sure why this has to be a list (np.array doesn't work)...
         if counter_regs[-1] > 21:
             raise OverflowError(f"too many qick inner loops ({n_sweeps}), run out of counter registers")
 
-        p.regwi(0, rcount, 0) # reset total run count
+        p.regwi(0, rcount, 0)  # reset total run count
 
-        p.regwi(0, rep_count, self.cfg["reps"] - 1) # set repetition count
+        # set repetition counter and tag
+        p.regwi(0, rep_count, self.cfg["reps"] - 1)
         p.label("LOOP_rep")
 
+        # add reset and staring tags for each sweep
         for creg, swp in zip(counter_regs[::-1], self.qick_sweeps[::-1]):
             swp.reset()
-            p.regwi(0, creg, swp.expts-1)
+            p.regwi(0, creg, swp.expts - 1)
             p.label(f"LOOP_{swp.reg.name if swp.reg.name is not None else creg}")
 
+        # run body and total_run_counter++
         p.body()
         p.mathi(0, rcount, rcount, "+", 1)
         p.memwi(0, rcount, 1)
 
+        # add update and stop condition for each sweep
         for creg, swp in zip(counter_regs, self.qick_sweeps):
             swp.update()
             p.loopnz(0, creg, f"LOOP_{swp.reg.name if swp.reg.name is not None else creg}")
 
+        # stop condition for repetition
         p.loopnz(0, rep_count, 'LOOP_rep')
 
         p.end()
 
-
-
     def get_expt_pts(self):
         """
-        Method for calculating experiment points (for x-axis of plots) based on the config.
+        todo: write me
 
-        :return: Numpy array of experiment points
-        :rtype: np.array
+
+        :return:
         """
         # return np.linspace(self.cfg["start"], self.cfg["stop"], self.expts)
         return None
-
-
-
