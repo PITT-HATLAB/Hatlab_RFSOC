@@ -1,26 +1,24 @@
-from plottr.data.datadict import DataDict, MeshgridDataDict, DataDictBase
-from plottr.data.datadict import datadict_to_meshgrid
-from plottr.data.datadict_storage import datadict_to_hdf5, DDH5Writer
-import h5py
-import numpy as np
-from plottr.apps.autoplot import autoplot
-
-
-import warnings
-import copy as cp
-import re
-
-import numpy as np
-from functools import reduce
 from typing import List, Tuple, Dict, Sequence, Union, Any, Iterator, Optional, TypeVar
 
-from plottr.utils import num, misc
+import numpy as np
 
-
+from plottr.data.datadict import DataDict, DataDictBase
 
 
 class QickDataDict(DataDict):
+    """
+    Subclass of plottr.DataDict class for keeping data from "QickProgram"s
+    """
     def __init__(self, ro_chs, inner_sweeps:DataDictBase=None, outer_sweeps:DataDictBase=None):
+        """
+        initialize the DataDict class with sweep axes.
+        :param ro_chs:
+        :param inner_sweeps: DataDict that contains the axes of inner sweeps. In the initialization, the DataDict can
+            just provide the names of inner sweeps axes and their units, the axes values can be empty. If the inner
+            sweep value does not change for each outer sweep, the values of each inner sweep axes can also be provided,
+            in which case the order of items in the dict has to follow first->last : innermost_sweep-> outermost_sweep.
+        :param outer_sweeps: ataDict that contains the axes of outer sweeps. Again, axes values can be empty.
+        """
         if outer_sweeps is None:
             outer_sweeps = {}
         if inner_sweeps is None:
@@ -36,10 +34,10 @@ class QickDataDict(DataDict):
         }
 
         for k, v in outer_sweeps.items():
-            dd[k] = {"unit": v.get("unit"), "__list__": v.get("values")} # __list__ for easier access to the sweep variables
+            dd[k] = {"unit": v.get("unit"), "__list__": v.get("values")} # metadata __list__ for easier access to the sweep variables
 
         for k, v in inner_sweeps.items():
-            dd[k] = {"unit": v.get("unit"), "__list__": v.get("values")} # __list__ for easier access to the sweep variables
+            dd[k] = {"unit": v.get("unit"), "__list__": v.get("values")} # metadata __list__ for easier access to the sweep variables
 
         for ch in ro_chs:
             dd[f"avg_iq_{ch}"] = {
@@ -53,21 +51,32 @@ class QickDataDict(DataDict):
 
         super().__init__(**dd)
 
-    def add_data(self, inner_sweeps, avg_i, avg_q, buf_i=None, buf_q=None, **outer_sweeps) -> None:
+    def add_data(self, avg_i, avg_q, buf_i=None, buf_q=None,
+                 inner_sweeps:Union[DataDict, DataDictBase, Dict]=None, **outer_sweeps) -> None:
         """
-        assume we add data to DataDict after each qick tproc inner sweep.
-        todo: explain the shape of each input here
-        todo: split expts to inner sweeps
-        :param inner_sweeps:
-        :param avg_i:
-        :param avg_q:
-        :param buf_i:
-        :param buf_q:
+        Function for adding data to DataDict after each qick tproc inner sweep.
+
+        :param avg_i: averaged I data returned from qick.RAveragerProgram.acquire()
+            (or other QickPrograms that uses the same data shape: (ro_ch, msmts, expts))
+        :param avg_q: averaged Q data returned from qick.RAveragerProgram.acquire()
+            (or other QickPrograms that uses the same data shape: (ro_ch, msmts, expts)
+        :param buf_i: all the I data points measured in qick run.
+            shape: (n_ro, tot_reps, msmts_per_rep), where the order of points in the last dimension follows:(m0_exp1, m1_exp1, m0_exp2...)
+        :param buf_q: all the Q data points measured in qick run.
+            shape: (n_ro, tot_reps, msmts_per_rep), where the order of points in the last dimension follows:(m0_exp1, m1_exp1, m0_exp2...)
+        :param inner_sweeps: Dict or DataDict that contains the keys and values of each qick inner sweep. The order has
+            to be first->last : innermost_sweep-> outermost_sweep. When the inner sweep values change for each new outer
+            sweep value, the inner sweep values can be re-specified when each time we add data, otherwise, the values
+            provided in initialize will be used.
+        :param outer_sweeps: kwargs for the new outer sweep values used in this data acquisition run.
+
         :return:
         """
         new_data = {}
         msmt_per_exp = avg_i.shape[-2]
         reps = 1 if buf_i is None else buf_i.shape[-2]
+        if inner_sweeps is None:
+            inner_sweeps = self.inner_sweeps
         flatten_inner = flattenSweepDict(inner_sweeps) # assume inner sweeps have a square shape
         expts = len(list(flatten_inner.values())[0]) # total inner sweep points
 
@@ -112,12 +121,13 @@ def flattenSweepDict(sweeps:Union[DataDictBase, Dict]):
 
 
 if __name__ == "__main__":
+    from plottr.apps.autoplot import autoplot
+
     ro_chs = [0,1]
     n_msmts = 2
     reps = 3
 
     # make fake data
-
     inner_sweeps = DataDictBase(length={"unit": "ns", "values": np.linspace(0, 100, 11)},
                                 phase={"unit": "deg", "values": np.linspace(0, 90, 2)}
                                 )
@@ -139,58 +149,9 @@ if __name__ == "__main__":
         bufq[i] = avgq[i].transpose().flatten() + (np.random.rand(reps, n_msmts * len(x1_pts)*len(x2_pts))-0.5)*10
 
 
-
-#-------------------------------
-    """
-    sweep_axes = {}
-    dd = {
-        "msmts": {},
-        "expts": {},
-        "reps": {},
-    }
-
-    dd.update(sweep_axes)
-
-    for ch in ro_chs:
-        dd.update({
-            f"avg_iq_{ch}": {
-                "axes": [*list(sweep_axes.keys()), "msmts", "expts"],
-                "unit": "a.u."
-            },
-            f"buf_iq_{ch}": {
-                "axes": [*list(sweep_axes.keys()), "reps", "msmts", "expts"],
-                "unit": "a.u.",
-            }
-        })
-
-    def transform_new_data( x_pts, avg_i, avg_q, buf_i=None, buf_q=None) :
-        new_data = {}
-        msmt_per_exp = avg_i.shape[-2]
-        reps = 1 if buf_i is None else buf_i.shape[-2]
-        expts = len(x_pts)
-        for i, ch in enumerate(ro_chs):
-            new_data[f"avg_iq_{ch}"] = np.tile((avg_i[i] + 1j * avg_q[i]).flatten(), reps)
-            if buf_i is not None:
-                new_data[f"buf_iq_{ch}"] = (buf_i[i] + 1j * buf_q[i]).reshape((reps, -1, msmt_per_exp)).transpose(0,2,1).flatten()
-                new_data[f"reps"] = np.repeat(np.arange(reps), msmt_per_exp * expts)
-            else:
-                new_data[f"buf_iq_{ch}"] = np.zeros(msmt_per_exp * expts)
-
-        new_data["expts"] = np.tile(x_pts, msmt_per_exp * reps)
-        new_data["msmts"] = np.repeat(range(msmt_per_exp), expts * reps)
-
-        return  new_data
-        
-    qdd = DataDict(**dd)
-    qdd.add_data(**transform_new_data(x_pts, avgi, avgq))
-    """
-# ----------------------------------------------------------------------
-
-
     outer_sweeps = DataDictBase(amp={"unit": "dBm", "values": np.linspace(-20,-5, 16)},
                                 freq={"unit": "MHz", "values": np.linspace(1000, 1005, 6)}
                                 )
-
 
     qdd = QickDataDict(ro_chs, inner_sweeps, outer_sweeps)
     # qdd.add_data(x_pts, avgi, avgq)
@@ -199,7 +160,7 @@ if __name__ == "__main__":
     qdd.add_data(inner_sweeps, avgi, avgq, bufi, bufq, amp=2, freq=3)
     qdd.add_data(inner_sweeps, avgi, avgq, bufi, bufq, amp=2, freq=4)
 
-    qddm = datadict_to_meshgrid(qdd, (2,2,3,2,11,2), [*list(outer_sweeps.keys())[::-1], "reps", *list(inner_sweeps.keys())[::-1], "msmts"])
-
-    ap = autoplot(qddm)
+    # the automatic griding in plottr doesn't work well in this complicated multidimensional sweep data.
+    # We have to manually set the grid in the app.
+    ap = autoplot(qdd)
 

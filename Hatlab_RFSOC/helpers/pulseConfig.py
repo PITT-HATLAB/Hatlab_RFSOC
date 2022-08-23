@@ -4,7 +4,6 @@ from typing import List, Literal
 import warnings
 
 
-
 def tanh_box(length: int, ramp_width: int, cut_offset=0.01, maxv=30000):
     """
     Create a numpy array containing a smooth box pulse made of two tanh functions subtract from each other.
@@ -100,18 +99,36 @@ def declareMuxedGenAndReadout(prog: QickProgram, res_ch: int, res_nqz: Literal[1
 
 
 
+def add_prepare_msmt(prog: QickProgram, q_drive_ch, q_pulse_cfg, res_ch, syncdelay, setback_pi_gain=True):
+    """
+    add a state preparation measurement to the qick asm program.
 
-def add_prepare_msmt(prog: QickProgram, q_drive_ch, q_pulse_cfg, res_ch, syncdelay):
+    :param prog:
+    :param q_drive_ch:
+    :param q_pulse_cfg:
+    :param res_ch:
+    :param syncdelay:
+    :param setback_pi_gain:
+    :return:
+    """
+    # todo: maybe move this to somewhere else
 
+    # play pi/2 pulse for ensuring ~50% selection rate.
     prog.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
                           freq=q_pulse_cfg["ge_freq"], gain=q_pulse_cfg["pi2_gain"])
-
-
     prog.pulse(ch=prog.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
+
     prog.sync_all(prog.us2cycles(0.02))  # align channels and wait 50ns
+
+    # add measurement
     prog.measure(pulse_ch=prog.cfg["gen_chs"][res_ch]["ch"],
                  adcs=prog.ro_chs,
                  pins=[0],
                  adc_trig_offset=prog.cfg["adc_trig_offset"],
                  wait=True,
                  syncdelay=prog.us2cycles(syncdelay))
+
+    # set qubit channel gain back to pipulse gain (which is the gain we would usually use.)
+    if setback_pi_gain:
+        prog.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
+                              freq=q_pulse_cfg["ge_freq"], gain=q_pulse_cfg["pi_gain"])
