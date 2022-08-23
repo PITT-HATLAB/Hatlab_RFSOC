@@ -4,18 +4,27 @@ from tqdm import tqdm
 import numpy as np
 from qick.qick_asm import QickProgram
 
-from Hatlab_RFSOC.core.pulses import add_gaussian, add_tanh
+from .pulses import add_gaussian, add_tanh
 
 RegisterTypes = Literal["freq", "time", "phase", "adc_freq"]
 
 
-class QickRegister():
-    """
-    todo: write me
-    """
-
-    def __init__(self, prog, page: int, addr: int, reg_type: RegisterTypes = None,
+class QickRegister:
+    def __init__(self, prog:QickProgram, page: int, addr: int, reg_type: RegisterTypes = None,
                  gen_ch: int = None, ro_ch: int = None, init_val=None, name: str = None):
+        """
+        keeps the generator/readout channel and register type information, for automatically using them when converting
+        value to register.
+
+        :param prog: Qick program in which the register is used.
+        :param page: page of the register
+        :param addr: address of the register in the register page (the register number)
+        :param reg_type: type of the register, used for automatic conversion to values.
+        :param gen_ch: generator channel numer to which the register is associated with.
+        :param ro_ch: readout channel numer to which the register is associated with.
+        :param init_val: initial value of the register. If reg_type is not None, the value should be in its physical unit.
+        :param name: name of the register
+        """
         self.prog = prog
         self.page = page
         self.addr = addr
@@ -28,6 +37,11 @@ class QickRegister():
             self.reset()
 
     def val2reg(self, val):
+        """
+        convert physical value to a qick register value
+        :param val:
+        :return:
+        """
         if self.type == "freq":
             return self.prog.freq2reg(val, self.gen_ch, self.ro_ch)
         elif self.type == "time":
@@ -43,6 +57,11 @@ class QickRegister():
             return np.int32(val)
 
     def reg2val(self, reg):
+        """
+        converts a qick register value to its value in physical units
+        :param reg:
+        :return:
+        """
         if self.type == "freq":
             return self.prog.reg2freq(reg, self.gen_ch)
         elif self.type == "time":
@@ -58,15 +77,27 @@ class QickRegister():
             return reg
 
     def reset(self):
+        """
+        reset register value to its init_val
+        :return:
+        """
         self.prog.safe_regwi(self.page, self.addr, self.val2reg(self.init_val))
 
 
-class QickSweep():
+class QickSweep:
     """
-    todo: write me
+    QickSweep class, describes a sweeps over a qick register.
     """
 
     def __init__(self, prog: QickProgram, reg: QickRegister, start, stop, expts: int):
+        """
+
+        :param prog: QickProgram in which the sweep happens.
+        :param reg: QickRegister object associated to the register to sweep.
+        :param start: start value of the register to sweep, in physical units
+        :param stop: stop value of the register to sweep, in physical units
+        :param expts: number of experiment points between start and stop value.
+        """
         self.prog = prog
         self.reg = reg
         self.start = start
@@ -75,11 +106,22 @@ class QickSweep():
         step_val = (stop - start) / (expts - 1)
         self.reg_step = reg.val2reg(step_val)
         self.init_val = start
+        self.sweep_array = np.linspace(start, stop, expts)
 
     def update(self):
-        self.prog.mathi(self.reg.page, self.reg.addr, self.reg.addr, '+', self.reg_step)  # update gain of the pulse
+        """
+        update the register value. This will be called after finishing last register sweep.
+        This function should be overwritten if more complicated update is needed.
+        :return:
+        """
+        self.prog.mathi(self.reg.page, self.reg.addr, self.reg.addr, '+', self.reg_step)
 
     def reset(self):
+        """
+        reset the register to the start value. will be called at the beginning of each sweep.
+        This function should be overwritten if more complicated reset is needed.
+        :return:
+        """
         self.reg.reset()
 
 
@@ -166,9 +208,9 @@ class APAveragerProgram(QickProgram):
 
         :param gen_ch: name of the generator channel, as in cfg["gen_chs"]
         :param name: name of the new register. Optional.
-        :param init_val: initial value for the register, when reg_type is provided, the reg_val should be in the unit
-            of the corresponding type.
-        "param reg_type: type of the register, e.g. freq, time, phase
+        :param init_val: initial value for the register, when reg_type is provided, the reg_val should be in the unit of
+            the corresponding type.
+        :param reg_type: type of the register, e.g. freq, time, phase.
         :return: QickRegister
         """
         gen_cgf = self.cfg["gen_chs"][gen_ch]
@@ -245,7 +287,7 @@ class APAveragerProgram(QickProgram):
         """
 
         # todo: the parser can be better... instead of using if commands to select from only two possible waveforms here
-        #   We should have a abstract waveform class. each new waveform should be written as a waveform class instance,
+        #   We should have a abstract waveform class, each new waveform should be written as a waveform class instance,
         #   and the parser should search for waveform in pulses.py (rename that to waveforms.py)
 
         if shape == "gaussian":
@@ -504,7 +546,7 @@ class NDAveragerProgram(APAveragerProgram):
 
     def add_sweep(self, sweep: QickSweep):
         """
-        todo: write me
+        Add a sweep to the qick asm program. The order of sweeping will follow first added first sweep.
         :param sweep:
         :return:
         """
@@ -513,7 +555,8 @@ class NDAveragerProgram(APAveragerProgram):
 
     def make_program(self):
         """
-        todo:write me
+        Make the N dimensional sweep program. The program will run initialize once at the beginning, then iterate over
+        all the sweep parameters and run the body. The whole sweep will repeat for cfg["reps"] number of times.
         """
         p = self
 
@@ -557,10 +600,9 @@ class NDAveragerProgram(APAveragerProgram):
 
     def get_expt_pts(self):
         """
-        todo: write me
-
-
         :return:
         """
-        # return np.linspace(self.cfg["start"], self.cfg["stop"], self.expts)
-        return None
+        sweep_pts = []
+        for swp in self.qick_sweeps:
+            sweep_pts.append(swp.sweep_array)
+        return sweep_pts

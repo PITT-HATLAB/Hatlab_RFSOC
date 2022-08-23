@@ -1,6 +1,8 @@
 import numpy as np
 from qick.qick_asm import QickProgram
 from typing import List, Literal
+import warnings
+
 
 
 def tanh_box(length: int, ramp_width: int, cut_offset=0.01, maxv=30000):
@@ -12,6 +14,7 @@ def tanh_box(length: int, ramp_width: int, cut_offset=0.01, maxv=30000):
     :param cut_offset: the initial offset to cut on the tanh Function
     :return:
     """
+    warnings.warn(DeprecationWarning("This function will be removed later, use core.pulses.tanh_box instead"))
     x = np.arange(0, length)
     c0_ = np.arctanh(2 * cut_offset - 1)
     c1_ = np.arctanh(2 * 0.95 - 1)
@@ -40,6 +43,7 @@ def add_tanh(prog: QickProgram, ch, name, length, ramp_width, cut_offset=0.01, m
         Value at the peak (if None, the max value for this generator will be used)
 
     """
+    warnings.warn(DeprecationWarning("This function will be removed later, use core.pulses.add_tanh instead"))
     gencfg = prog.soccfg['gens'][ch]
     if maxv is None: maxv = gencfg['maxv'] * gencfg['maxv_scale']
     samps_per_clk = gencfg['samps_per_clk']
@@ -93,3 +97,21 @@ def declareMuxedGenAndReadout(prog: QickProgram, res_ch: int, res_nqz: Literal[1
     for iCh, ch in enumerate(ro_chs):
         prog.declare_readout(ch=ch, freq=res_freqs[iCh], length=readout_length,
                              gen_ch=res_ch)
+
+
+
+
+def add_prepare_msmt(prog: QickProgram, q_drive_ch, q_pulse_cfg, res_ch, syncdelay):
+
+    prog.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
+                          freq=q_pulse_cfg["ge_freq"], gain=q_pulse_cfg["pi2_gain"])
+
+
+    prog.pulse(ch=prog.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
+    prog.sync_all(prog.us2cycles(0.02))  # align channels and wait 50ns
+    prog.measure(pulse_ch=prog.cfg["gen_chs"][res_ch]["ch"],
+                 adcs=prog.ro_chs,
+                 pins=[0],
+                 adc_trig_offset=prog.cfg["adc_trig_offset"],
+                 wait=True,
+                 syncdelay=prog.us2cycles(syncdelay))

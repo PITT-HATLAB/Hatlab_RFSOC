@@ -36,8 +36,8 @@ def gaussian(sigma: int, length: int, maxv=30000):
     return y
 
 
-def add_tanh(prog: QickProgram, gen_ch, name, length, ramp_width, cut_offset=0.01, maxv=None):
-    """Adds a smooth box pulse made of two tanh functions to the waveform library.
+def add_tanh(prog: QickProgram, gen_ch, name, length:float, ramp_width:float, cut_offset:float=0.01, maxv=None):
+    """Adds a smooth box pulse made of two tanh functions to the waveform library, using physical parameters of the pulse.
     The pulse will peak at length/2.
 
     Parameters
@@ -73,7 +73,7 @@ def add_tanh(prog: QickProgram, gen_ch, name, length, ramp_width, cut_offset=0.0
 
 
 def add_gaussian(prog: QickProgram, gen_ch:str, name, sigma:float, length:float, maxv=None):
-    """Adds a gaussian pulse to the waveform library.
+    """Adds a gaussian pulse to the waveform library, using physical parameters of the pulse.
     The pulse will peak at length/2.
 
     Parameters
@@ -105,50 +105,3 @@ def add_gaussian(prog: QickProgram, gen_ch:str, name, sigma:float, length:float,
 
 
 
-
-
-def add_tanh_with_register_vals(prog: QickProgram, ch:str, name:str, length, ramp_width, cut_offset=0.01, maxv=None):
-    """Adds a smooth box pulse made of two tanh functions to the waveform library.
-    The pulse will peak at length/2.
-
-    Parameters
-    ----------
-    ch : str
-        name of the generator channel
-    name : str
-        Name of the pulse
-    length : int
-        Total pulse length (in units of fabric clocks)
-    ramp_width : int
-        Number of points from cut_offset to 0.95 amplitude (in units of fabric clocks)
-    cut_offset: float
-        the initial offset to cut on the tanh Function (in unit of unit-height pulse)
-    maxv : float
-        Value at the peak (if None, the max value for this generator will be used)
-
-    """
-    gencfg = prog.soccfg['gens'][ch]
-    if maxv is None: maxv = gencfg['maxv'] * gencfg['maxv_scale']
-    samps_per_clk = gencfg['samps_per_clk']
-
-    length = np.round(length) * samps_per_clk
-    ramp_width *= samps_per_clk
-
-    prog.add_pulse(ch, name, idata=tanh_box(length, ramp_width, cut_offset, maxv=maxv))
-
-
-
-def add_prepare_msmt(prog: QickProgram, q_drive_ch, q_pulse_cfg, res_ch, syncdelay):
-
-    prog.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
-                          freq=q_pulse_cfg["ge_freq"], gain=q_pulse_cfg["pi2_gain"])
-
-
-    prog.pulse(ch=prog.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
-    prog.sync_all(prog.us2cycles(0.02))  # align channels and wait 50ns
-    prog.measure(pulse_ch=prog.cfg["gen_chs"][res_ch]["ch"],
-                 adcs=prog.ro_chs,
-                 pins=[0],
-                 adc_trig_offset=prog.cfg["adc_trig_offset"],
-                 wait=True,
-                 syncdelay=prog.us2cycles(syncdelay))

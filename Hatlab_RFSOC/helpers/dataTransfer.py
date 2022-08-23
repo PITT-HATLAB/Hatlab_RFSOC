@@ -1,3 +1,9 @@
+"""
+This module was originally written for transferring data from RFSoC to local PC.
+We probably don't need these functions if we run experiments with pyro.
+"""
+
+
 import subprocess
 from pathlib import Path
 from typing import Dict
@@ -5,15 +11,6 @@ import json
 import numpy as np
 
 HOMEPATH = "/home/xilinx"
-""" This package was written for transferring data from RFSoC to local PC.
-We probably don't need this function if we run codes with Pyro 
-
-"""
-
-
-# def saveData(data:Dict, fileName, filePath):
-#     df = pd.DataFrame(data)  
-#     df.to_feather(filePath + fileName)
 
 def saveData(data:Dict, fileName, filePath):
     with open(filePath+fileName, 'w') as outfile:
@@ -28,7 +25,7 @@ def _jsonDefaultRules(obj):
     raise TypeError('Unknown type:', type(obj))
 
 def transferFileToRemote(fileName, localPath, remotePath, remoteIP="192.168.2.2", remoteUser="hatlab", removeLocalData=False):
-    command = f"scp {localPath+fileName} hatlab@{remoteIP}:/" + remotePath
+    command = f"scp {localPath+fileName} {remoteUser}@{remoteIP}:/" + remotePath
     subprocess.call(command, shell=True)
     if removeLocalData:
         rm_cmd = f"rm {localPath+fileName} "
