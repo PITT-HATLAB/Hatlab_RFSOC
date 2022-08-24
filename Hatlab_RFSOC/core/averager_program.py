@@ -1,4 +1,5 @@
 from typing import Dict, List, Union, Callable, Literal, Tuple
+import warnings
 
 from tqdm import tqdm
 import numpy as np
@@ -10,7 +11,7 @@ RegisterTypes = Literal["freq", "time", "phase", "adc_freq"]
 
 
 class QickRegister:
-    def __init__(self, prog:QickProgram, page: int, addr: int, reg_type: RegisterTypes = None,
+    def __init__(self, prog: QickProgram, page: int, addr: int, reg_type: RegisterTypes = None,
                  gen_ch: int = None, ro_ch: int = None, init_val=None, name: str = None):
         """
         keeps the generator/readout channel and register type information, for automatically using them when converting
@@ -84,12 +85,45 @@ class QickRegister:
         self.prog.safe_regwi(self.page, self.addr, self.val2reg(self.init_val))
 
 
-class QickSweep:
+class AbsQickSweep:
+    """
+    Abstract QickSweep class.
+    """
+
+    def __init__(self, prog: QickProgram, label=None):
+        """
+        :param prog: QickProgram in which the sweep happens.
+        :param label: label to be used for the loop tag in qick asm program.
+        """
+        self.prog = prog
+        self.label = label
+        self.expts: int = None
+
+    def get_sweep_pts(self) -> Union[List, np.array]:
+        """
+        abstract method for getting the sweep values
+        """
+        pass
+
+    def update(self):
+        """
+        abstract method for updating a sweep
+        """
+        pass
+
+    def reset(self):
+        """
+        abstract method for resetting the sweep value at the beginning of each sweep.
+        """
+        pass
+
+
+class QickSweep(AbsQickSweep):
     """
     QickSweep class, describes a sweeps over a qick register.
     """
 
-    def __init__(self, prog: QickProgram, reg: QickRegister, start, stop, expts: int):
+    def __init__(self, prog: QickProgram, reg: QickRegister, start, stop, expts: int, label=None):
         """
 
         :param prog: QickProgram in which the sweep happens.
@@ -97,16 +131,24 @@ class QickSweep:
         :param start: start value of the register to sweep, in physical units
         :param stop: stop value of the register to sweep, in physical units
         :param expts: number of experiment points between start and stop value.
+        :param label: label to be used for the loop tag in qick asm program.
         """
-        self.prog = prog
+        super().__init__(prog)
         self.reg = reg
         self.start = start
         self.stop = stop
         self.expts = expts
         step_val = (stop - start) / (expts - 1)
         self.reg_step = reg.val2reg(step_val)
-        self.init_val = start
-        self.sweep_array = np.linspace(start, stop, expts)
+        self.reg.init_val = start
+
+        if label is None:
+            self.label = self.reg.name
+        else:
+            self.label = label
+
+    def get_sweep_pts(self):
+        return np.linspace(self.start, self.stop, self.expts)
 
     def update(self):
         """
@@ -123,6 +165,92 @@ class QickSweep:
         :return:
         """
         self.reg.reset()
+
+
+class FlatTopLengthSweep(QickSweep):
+    """
+    Currently, the register that controls the flat part length of a flat_top pulse is packed in the last 16 bit of
+    "mode" register. So we need some additional treatment to the initial and step values here.
+    """
+
+    def __init__(self, prog: QickProgram, mode_reg: QickRegister, start, stop, expts: int,
+                 t_wait_reg: QickRegister = None, label=None):
+        """
+        initialize a QickSweep object for sweeping the flat part length of a flat_top pulse. The register used for this
+        sweep needs to the "mode" register of a gen channel. If t_wait_reg is provided, it's value will also be updated/
+        reset when each time the pulse flat part length is updated/reset.
+
+        :param prog: QickProgram in which the sweep happens.
+        :param mode_reg: mode register associated to the generator channel in which the pulse length will be swept.
+        :param start: start value of the flat part length, in us.
+        :param stop: stop value of the flat part length, in us.
+        :param expts: number of experiment points between start and stop value.
+        :param t_wait_reg: QickRegister object associated to t_proc, which is used for waiting for the amount of time
+            that equals to flat part length of the pulse.
+        :param label: label to be used for the loop tag in qick asm program.
+        """
+
+        super().__init__(prog, mode_reg, start, stop, expts, label)
+
+        # check length validity
+        min_l, max_l = prog.cycles2us(2, self.reg.gen_ch), prog.cycles2us(2 ** 16, self.reg.gen_ch)
+        for pl in [start, stop]:
+            if pl >= max_l or pl <= min_l:
+                raise RuntimeError(f"flat part length must be longer then {min_l} us, and shorter than {max_l} us")
+
+        # overwrite the initial and step value in base class
+        step_val = (stop - start) / (expts - 1)
+        self.reg_step = prog.us2cycles(step_val, self.reg.gen_ch)
+        if self.reg_step == 0:
+            warnings.warn(RuntimeWarning(f"sweep step for register {self.reg.name} is 0"))
+
+        reg_start = prog.us2cycles(start, self.reg.gen_ch)
+        gen_mgr = prog.gen_mgrs[self.reg.gen_ch]
+        self.reg.init_val = gen_mgr.get_mode_code(length=reg_start, mode="oneshot", outsel="dds")
+
+        # also sweep the wait time register in t_proc if provided
+        self.t_wait_reg = t_wait_reg
+        if t_wait_reg is not None:
+            self.t_wait_step = prog.us2cycles(step_val)
+
+    def update(self):
+        self.prog.mathi(self.reg.page, self.reg.addr, self.reg.addr, '+', self.reg_step)
+        if self.t_wait_reg is not None:
+            self.prog.mathi(self.t_wait_reg.page, self.t_wait_reg.addr, self.t_wait_reg.addr, '+', self.t_wait_step)
+
+    def reset(self):
+        self.reg.reset()
+        if self.t_wait_reg is not None:
+            self.t_wait_reg.reset()
+
+
+def merge_sweep(sweeps: List[QickSweep]) -> AbsQickSweep:
+    """
+    create a new QickSweep object that merges the update and reset functions of multiple QickSweeps into one. This is
+    useful when multiple registers need to be updated at the same time in one sweep. The "label" and "get_sweep_pts" of
+    the first sweep in the list will be used for the merged sweep.
+    :param sweeps:
+    :return:
+    """
+    merged = AbsQickSweep(sweeps[0].prog, sweeps[0].label)
+    merged.get_sweep_pts = sweeps[0].get_sweep_pts
+    expts_ = set([swp.expts for swp in sweeps])
+    if len(expts_) != 1:
+        raise ValueError(f"all sweeps for merging must have same number of expts, got{expts_}")
+    merged.expts = sweeps[0].expts
+
+    def _update():
+        for swp in sweeps:
+            swp.update()
+
+    def _reset():
+        for swp in sweeps:
+            swp.reset()
+
+    merged.update = _update
+    merged.reset = _reset
+
+    return merged
 
 
 class APAveragerProgram(QickProgram):
@@ -201,7 +329,8 @@ class APAveragerProgram(QickProgram):
         reg = QickRegister(self, page, addr, reg_type, gen_cgf["ch"], gen_cgf.get("ro_ch"), name=f"{gen_ch}_{name}")
         return reg
 
-    def new_reg(self, gen_ch: str, name: str = None, init_val=None, reg_type: RegisterTypes = None) -> QickRegister:
+    def new_reg(self, gen_ch: str, name: str = None, init_val=None, reg_type: RegisterTypes = None,
+                tproc_reg=False) -> QickRegister:
         """
         Declare a new register in the generator register page. Address automatically adds 1 one when each time a new
         register in the same page is declared.
@@ -211,6 +340,10 @@ class APAveragerProgram(QickProgram):
         :param init_val: initial value for the register, when reg_type is provided, the reg_val should be in the unit of
             the corresponding type.
         :param reg_type: type of the register, e.g. freq, time, phase.
+        :param tproc_reg: if true, the new register created will not be associated to a specific generator or readout
+            channel. It will still be on the same page as the gen_ch for math calculations. This is usually used for a
+            time register in t_processor, where we want to calculate "us2cycles" with the t_proc fabric clock rate
+            instead of the generator clock rate.
         :return: QickRegister
         """
         gen_cgf = self.cfg["gen_chs"][gen_ch]
@@ -227,7 +360,10 @@ class APAveragerProgram(QickProgram):
         if name in self.user_reg_dict[gen_ch].keys():
             raise KeyError(f"register name '{name}' already exists for channel {gen_ch}")
 
-        reg = QickRegister(self, page, addr, reg_type, gen_cgf["ch"], gen_cgf.get("ro_ch"), init_val, name=name)
+        if tproc_reg:
+            reg = QickRegister(self, page, addr, reg_type, None, None, init_val, name=name)
+        else:
+            reg = QickRegister(self, page, addr, reg_type, gen_cgf["ch"], gen_cgf.get("ro_ch"), init_val, name=name)
         self.user_reg_dict[gen_ch][name] = reg
 
         return reg
@@ -528,7 +664,7 @@ class NDAveragerProgram(APAveragerProgram):
         Constructor for the NDAveragerProgram. Make the ND sweep asm commands.
         """
         super().__init__(soccfg, cfg)
-        self.qick_sweeps: List[QickSweep] = []
+        self.qick_sweeps: List[AbsQickSweep] = []
         self.expts = 1
         self.make_program()
 
@@ -544,7 +680,7 @@ class NDAveragerProgram(APAveragerProgram):
         """
         pass
 
-    def add_sweep(self, sweep: QickSweep):
+    def add_sweep(self, sweep: AbsQickSweep):
         """
         Add a sweep to the qick asm program. The order of sweeping will follow first added first sweep.
         :param sweep:
@@ -581,7 +717,7 @@ class NDAveragerProgram(APAveragerProgram):
         for creg, swp in zip(counter_regs[::-1], self.qick_sweeps[::-1]):
             swp.reset()
             p.regwi(0, creg, swp.expts - 1)
-            p.label(f"LOOP_{swp.reg.name if swp.reg.name is not None else creg}")
+            p.label(f"LOOP_{swp.label if swp.label is not None else creg}")
 
         # run body and total_run_counter++
         p.body()
@@ -591,7 +727,7 @@ class NDAveragerProgram(APAveragerProgram):
         # add update and stop condition for each sweep
         for creg, swp in zip(counter_regs, self.qick_sweeps):
             swp.update()
-            p.loopnz(0, creg, f"LOOP_{swp.reg.name if swp.reg.name is not None else creg}")
+            p.loopnz(0, creg, f"LOOP_{swp.label if swp.label is not None else creg}")
 
         # stop condition for repetition
         p.loopnz(0, rep_count, 'LOOP_rep')
@@ -604,5 +740,5 @@ class NDAveragerProgram(APAveragerProgram):
         """
         sweep_pts = []
         for swp in self.qick_sweeps:
-            sweep_pts.append(swp.sweep_array)
+            sweep_pts.append(swp.get_sweep_pts())
         return sweep_pts

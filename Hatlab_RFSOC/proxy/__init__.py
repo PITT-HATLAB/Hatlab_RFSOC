@@ -6,7 +6,8 @@ PITTIP = "136.142"  # our lab PC usually has two ethernet cards, the one that co
 
 
 def getLocalIPv4():
-    # get IPv4 addresses of the local PC and find the one that doesn't start with PITTIP.
+    # get IPv4 addresses of the local PC, and find the address of the ethernet card that is on lab local network
+    # (the one that doesn't start with PITTIP).
     addrInfo = socket.getaddrinfo(socket.gethostname(), None, family=socket.AF_INET)
     ipv4Addres = [i[4][0] for i in addrInfo]
     localIPv4 = None
