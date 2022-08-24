@@ -61,9 +61,9 @@ class QickDataDict(DataDict):
         :param avg_q: averaged Q data returned from qick.RAveragerProgram.acquire()
             (or other QickPrograms that uses the same data shape: (ro_ch, msmts, expts)
         :param buf_i: all the I data points measured in qick run.
-            shape: (n_ro, tot_reps, msmts_per_rep), where the order of points in the last dimension follows:(m0_exp1, m1_exp1, m0_exp2...)
+            shape: (ro_ch, tot_reps, msmts_per_rep), where the order of points in the last dimension follows:(m0_exp1, m1_exp1, m0_exp2...)
         :param buf_q: all the Q data points measured in qick run.
-            shape: (n_ro, tot_reps, msmts_per_rep), where the order of points in the last dimension follows:(m0_exp1, m1_exp1, m0_exp2...)
+            shape: (ro_ch, tot_reps, msmts_per_rep), where the order of points in the last dimension follows:(m0_exp1, m1_exp1, m0_exp2...)
         :param inner_sweeps: Dict or DataDict that contains the keys and values of each qick inner sweep. The order has
             to be first->last : innermost_sweep-> outermost_sweep. When the inner sweep values change for each new outer
             sweep value, the inner sweep values can be re-specified when each time we add data, otherwise, the values
@@ -155,10 +155,10 @@ if __name__ == "__main__":
 
     qdd = QickDataDict(ro_chs, inner_sweeps, outer_sweeps)
     # qdd.add_data(x_pts, avgi, avgq)
-    qdd.add_data(inner_sweeps, avgi, avgq, bufi, bufq, amp=1, freq=3)
-    qdd.add_data(inner_sweeps, avgi, avgq, bufi, bufq, amp=1, freq=4)
-    qdd.add_data(inner_sweeps, avgi, avgq, bufi, bufq, amp=2, freq=3)
-    qdd.add_data(inner_sweeps, avgi, avgq, bufi, bufq, amp=2, freq=4)
+    qdd.add_data(avgi, avgq, bufi, bufq, inner_sweeps, amp=1, freq=3)
+    qdd.add_data(avgi, avgq, bufi, bufq, inner_sweeps, amp=1, freq=4)
+    qdd.add_data(avgi, avgq, bufi, bufq, inner_sweeps, amp=2, freq=3)
+    qdd.add_data(avgi, avgq, bufi, bufq, inner_sweeps, amp=2, freq=4)
 
     # the automatic griding in plottr doesn't work well in this complicated multidimensional sweep data.
     # We have to manually set the grid in the app.

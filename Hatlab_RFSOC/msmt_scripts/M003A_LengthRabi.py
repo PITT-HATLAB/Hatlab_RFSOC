@@ -18,7 +18,7 @@ from M000_ConfigSel import config, info
 from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
 
 
-class AmplitudeRabiProgram(NDAveragerProgram):
+class LengthRabiProgram(NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
         self.res_ch = self.cfg["gen_chs"]["muxed_res"]["ch"]
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     }
     config.update(expt_cfg)  # combine configs
 
-    prog = AmplitudeRabiProgram(soccfg, config)
+    prog = LengthRabiProgram(soccfg, config)
     x_pts, avgi, avgq = prog.acquire(soc, load_pulses=True, progress=True, debug=False)
     x_pts = x_pts[0]
 
