@@ -65,14 +65,14 @@ class Experiment():
         # run program (and save data)
         with ddw as dw:
             dw.save_config(self.cfg)
-            prog = self.program(self.soccfg, self.cfg)
-            x_pts, avgi, avgq = prog.acquire(self.soc, load_pulses=True, progress=True, debug=False,
+            self.prog = self.program(self.soccfg, self.cfg)
+            x_pts, avgi, avgq = self.prog.acquire(self.soc, load_pulses=True, progress=True, debug=False,
                                              readouts_per_experiment=readouts_per_experiment,
                                              save_experiments=save_experiments)
             if save_buf:
-                dw.add_data(avg_i=avgi, avg_q=avgq, buf_i=prog.di_buf_p, buf_q=prog.dq_buf_p,
+                dw.add_data(avg_i=avgi, avg_q=avgq, buf_i=self.prog.di_buf_p, buf_q=self.prog.dq_buf_p,
                             inner_sweeps=inner_sweeps, **outer_vals)
-                return x_pts, avgi, avgq, prog.di_buf_p, prog.dq_buf_p
+                return x_pts, avgi, avgq, self.prog.di_buf_p, self.prog.dq_buf_p
             else:
                 dw.add_data(avg_i=avgi, avg_q=avgq, inner_sweeps=inner_sweeps, **outer_vals)
                 return x_pts, avgi, avgq

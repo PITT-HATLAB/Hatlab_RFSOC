@@ -1,7 +1,7 @@
-import numpy as np
-from qick.qick_asm import QickProgram
 from typing import List, Literal
 
+import numpy as np
+from qick.qick_asm import QickProgram
 
 
 def tanh_box(length: int, ramp_width: int, cut_offset=0.01, maxv=30000):
