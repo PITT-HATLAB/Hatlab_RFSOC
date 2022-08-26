@@ -36,7 +36,8 @@ class LengthRabiProgram(NDAveragerProgram):
         # sweeps the pulse flat part length, and waiting time in tproc after the pulse
         self.t_r_wait = self.new_reg("q_drive", init_val=cfg["l_start"], reg_type="time", tproc_reg=True)
         self.q_r_mode = self.get_reg("q_drive", "mode")
-        swp = FlatTopLengthSweep(self, self.q_r_mode, cfg["l_start"], cfg["l_stop"], cfg["l_expts"], self.t_r_wait)
+        self.q_r_mode_update = self.new_reg("q_drive")
+        swp = FlatTopLengthSweep(self, self.q_r_mode_update, cfg["l_start"], cfg["l_stop"], cfg["l_expts"], self.t_r_wait)
         self.add_sweep(swp)
 
         # ramp part length
@@ -46,11 +47,16 @@ class LengthRabiProgram(NDAveragerProgram):
 
     def body(self):
         cfg = self.cfg
-        prepareWithMSMT = cfg.get("prepareWithMSMT", False)
+        sel_msmt = cfg.get("sel_msmt", False)
 
-        if prepareWithMSMT:
+        if sel_msmt:
             add_prepare_msmt(self, "q_drive", cfg["q_pulse_cfg"], "muxed_res", syncdelay=1)
+            # set the q drive pulse shape back to flat top
+            self.set_pulse_params("q_drive", style="flat_top", waveform="q_gauss", phase=0,
+                                  freq=cfg["q_pulse_cfg"]["ge_freq"], gain=cfg["gain"], length=cfg["l_start"])
 
+        # set the updated mode value (update pulse length)
+        self.mathi(self.q_r_mode.page, self.q_r_mode.addr, self.q_r_mode_update.addr, '+', 0)
         # drive and measure
         self.pulse(ch=self.qubit_ch)  # play gaussian pulse
         self.synci(self.t_ramp_length_reg) # total ramp length (raising and lowering)
@@ -79,12 +85,13 @@ if __name__ == "__main__":
         "rounds": 1,
 
         "relax_delay": 200,  # [us]
-        "prepareWithMSMT": False
+        "sel_msmt": False
     }
     config.update(expt_cfg)  # combine configs
 
     prog = LengthRabiProgram(soccfg, config)
-    x_pts, avgi, avgq = prog.acquire(soc, load_pulses=True, progress=True, debug=False)
+    x_pts, avgi, avgq = prog.acquire(soc, load_pulses=True, progress=True, debug=False,
+                                     readouts_per_experiment=int(expt_cfg["sel_msmt"])+1)
     x_pts = x_pts[0]
 
     # Plotting Results

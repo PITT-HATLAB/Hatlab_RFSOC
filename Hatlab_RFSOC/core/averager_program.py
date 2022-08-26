@@ -466,7 +466,7 @@ class APAveragerProgram(QickProgram):
         :type angle: list
         :param readouts_per_experiment: readouts per experiment
         :type readouts_per_experiment: int
-        :param save_experiments: saved experiments
+        :param save_experiments: saved readouts (by default, save all readouts)
         :type save_experiments: list
         :param load_pulses: If true, loads pulses into the tProc
         :type load_pulses: bool
@@ -484,7 +484,7 @@ class APAveragerProgram(QickProgram):
         if angle is None:
             angle = [0, 0]
         if save_experiments is None:
-            save_experiments = [0]
+            save_experiments = range(readouts_per_experiment)
         if load_pulses:
             self.load_pulses(soc)
 
@@ -594,7 +594,7 @@ class APAveragerProgram(QickProgram):
         :type angle: list
         :param readouts_per_experiment: readouts per experiment
         :type readouts_per_experiment: int
-        :param save_experiments: saved experiments
+        :param save_experiments: saved readouts (by default, save all readouts)
         :type save_experiments: list
         :param load_pulses: If true, loads pulses into the tProc
         :type load_pulses: bool
@@ -622,7 +622,7 @@ class APAveragerProgram(QickProgram):
         if angle is None:
             angle = [0, 0]
         if save_experiments is None:
-            save_experiments = [0]
+            save_experiments = range(readouts_per_experiment)
         if "rounds" not in self.cfg or self.cfg["rounds"] == 1:
             expt_pts, avg_di, avg_dq = self.acquire_round(soc, threshold=threshold, angle=angle,
                                                           readouts_per_experiment=readouts_per_experiment,

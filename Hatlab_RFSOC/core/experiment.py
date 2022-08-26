@@ -1,11 +1,12 @@
 from typing import Dict, List, Union, Callable, Type
 
-from plottr.data.datadict import DataDict, DataDictBase
 from qick.qick_asm import QickProgram
 
 from Hatlab_RFSOC.proxy import getSocProxy
 from Hatlab_RFSOC.helpers import QickDataDict
 from Hatlab_DataProcessing.data_saving import HatDDH5Writer, DummyWriter
+
+from plottr.data.datadict import DataDict, DataDictBase
 
 
 class Experiment():

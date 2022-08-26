@@ -22,7 +22,7 @@ from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
 
 
 
-from M003A_LengthRabi import LengthRabiProgram
+from M003B_LengthRabi import LengthRabiProgram
 
 if __name__ == "__main__":
     soc, soccfg = getSocProxy(info["PyroServer"])
@@ -38,13 +38,13 @@ if __name__ == "__main__":
         "rounds": 1,
 
         "relax_delay": 200,  # [us]
-        "prepareWithMSMT": False
+        "sel_msmt": True
     }
     config.update(expt_cfg)  # combine configs
 
     pumpFreqList = np.linspace(4860, 4880, 21)
 
-    inner_sweeps = DataDict(legnth={"unit": "us", "values": get_sweep_vals(expt_cfg, "l")})
+    inner_sweeps = DataDict(length={"unit": "us", "values": get_sweep_vals(expt_cfg, "l")})
     outer_sweeps = DataDict(freq={"unit": "MHz", "values": pumpFreqList})
 
     expt = Experiment(LengthRabiProgram, config, info, inner_sweeps, outer_sweeps,
@@ -53,7 +53,8 @@ if __name__ == "__main__":
     for i, pf in enumerate(pumpFreqList):
         print(i)
         expt.cfg["q_pulse_cfg"]["ge_freq"] = pf
-        x_pts, avgi, avgq, di_buf, dq_buf = expt.run(save_data=True, save_buf=True, freq=pf)
+        x_pts, avgi, avgq, di_buf, dq_buf = expt.run(save_data=True, save_buf=True,
+                                                     readouts_per_experiment=int(expt_cfg["sel_msmt"])+1, freq=pf)
 
 
 

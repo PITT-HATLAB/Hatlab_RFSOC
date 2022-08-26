@@ -14,7 +14,7 @@ from M000_ConfigSel import config, info
 from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
 
 
-class T1Program(NDAveragerProgram):
+class T2RProgram(NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
         self.res_ch = self.cfg["gen_chs"]["muxed_res"]["ch"]
@@ -37,9 +37,9 @@ class T1Program(NDAveragerProgram):
 
     def body(self):
         cfg = self.cfg
-        prepareWithMSMT = cfg.get("prepareWithMSMT", False)
+        sel_msmt = cfg.get("sel_msmt", False)
 
-        if prepareWithMSMT:
+        if sel_msmt:
             add_prepare_msmt(self, "q_drive", cfg["q_pulse_cfg"], "muxed_res", syncdelay=1, setback_pi_gain=False)
 
         # drive and measure
@@ -47,8 +47,7 @@ class T1Program(NDAveragerProgram):
         self.sync_all()  # align channels and wait
         self.sync(self.t_r_wait.page, self.t_r_wait.addr)
         self.pulse(ch=self.qubit_ch)  # play pi/2 pulse
-        self.sync_all()  # align channels and wait
-        self.sync(self.t_r_wait.page, self.t_r_wait.addr)
+        self.sync_all(0.05)  # align channels and wait
         # --- msmt
         self.measure(pulse_ch=self.res_ch,
                      adcs=self.ro_chs,
@@ -71,11 +70,11 @@ if __name__ == "__main__":
         "rounds": 1,
 
         "relax_delay": 200,  # [us]
-        "prepareWithMSMT":False
+        "sel_msmt":False
     }
     config.update(expt_cfg)  # combine configs
 
-    prog = T1Program(soccfg, config)
+    prog = T2RProgram(soccfg, config)
     x_pts, avgi, avgq = prog.acquire(soc, load_pulses=True, progress=True, debug=False)
     x_pts = x_pts[0]
 

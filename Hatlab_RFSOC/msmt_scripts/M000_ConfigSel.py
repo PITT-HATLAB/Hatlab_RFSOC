@@ -6,5 +6,5 @@ cfgModule = import_module(cfgFileName)
 reload(cfgModule)
 
 config = cfgModule.config
-info = cfgModule.__dict__.get("info")
+info = cfgModule.info
 

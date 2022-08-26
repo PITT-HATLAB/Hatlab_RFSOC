@@ -99,7 +99,8 @@ def declareMuxedGenAndReadout(prog: QickProgram, res_ch: int, res_nqz: Literal[1
 
 
 
-def add_prepare_msmt(prog: QickProgram, q_drive_ch, q_pulse_cfg, res_ch, syncdelay, setback_pi_gain=True):
+def add_prepare_msmt(prog: QickProgram, q_drive_ch:str, q_pulse_cfg:dict, res_ch:str, syncdelay:float,
+                     prepare_q_gain:int=None, setback_q_gain:int=None):
     """
     add a state preparation measurement to the qick asm program.
 
@@ -108,17 +109,21 @@ def add_prepare_msmt(prog: QickProgram, q_drive_ch, q_pulse_cfg, res_ch, syncdel
     :param q_pulse_cfg:
     :param res_ch:
     :param syncdelay:
-    :param setback_pi_gain:
+    :param prepare_q_gain:
+    :param setback_q_gain:
     :return:
     """
     # todo: maybe move this to somewhere else
 
-    # play pi/2 pulse for ensuring ~50% selection rate.
-    prog.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
-                          freq=q_pulse_cfg["ge_freq"], gain=q_pulse_cfg["pi2_gain"])
+    if prepare_q_gain is None:
+        prepare_q_gain = q_pulse_cfg["pi2_gain"]
+
+    # play ~pi/2 pulse to ensure ~50% selection rate.
+    prog.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"], phase=q_pulse_cfg.get("phase", 0),
+                          freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
     prog.pulse(ch=prog.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
 
-    prog.sync_all(prog.us2cycles(0.02))  # align channels and wait 50ns
+    prog.sync_all(prog.us2cycles(0.05))  # align channels and wait 50ns
 
     # add measurement
     prog.measure(pulse_ch=prog.cfg["gen_chs"][res_ch]["ch"],
@@ -129,6 +134,6 @@ def add_prepare_msmt(prog: QickProgram, q_drive_ch, q_pulse_cfg, res_ch, syncdel
                  syncdelay=prog.us2cycles(syncdelay))
 
     # set qubit channel gain back to pipulse gain (which is the gain we would usually use.)
-    if setback_pi_gain:
-        prog.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
-                              freq=q_pulse_cfg["ge_freq"], gain=q_pulse_cfg["pi_gain"])
+    if setback_q_gain is not None:
+        prog.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"], phase=q_pulse_cfg.get("phase", 0),
+                              freq=q_pulse_cfg["ge_freq"], gain=setback_q_gain)

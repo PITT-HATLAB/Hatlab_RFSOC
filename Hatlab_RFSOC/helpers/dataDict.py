@@ -169,12 +169,12 @@ class DataFromQDDH5:
     def _get_axes_values(self):
         for ax in self.axes_names:
             if ax == "reps":
-                self.axes[ax] = {"unit": "n", "value": np.arange(self.reps)}
+                self.axes[ax] = {"unit": "n", "values": np.arange(self.reps)}
             elif ax == "msmts":
-                self.axes[ax] = {"unit": "n", "value": np.arange(self.datashape[-1])}
+                self.axes[ax] = {"unit": "n", "values": np.arange(self.datashape[-1])}
             else:  # assume all the sweep axes have metadata "__list__"
                 ax_val = self.datadict.meta_val("list", ax)
-                self.axes[ax] = {"unit": self.datadict[ax].get("unit"), "value": ax_val}
+                self.axes[ax] = {"unit": self.datadict[ax].get("unit"), "values": ax_val}
 
     def reorder_data(self, axis_order: List[str] = None, flatten_sweep=False, mute=False):
         if axis_order is None:
@@ -188,20 +188,24 @@ class DataFromQDDH5:
         axes_ = {k: self.axes[k] for k in axis_order}
         self.axes = axes_
         ds_ = np.array(self.datashape)[new_idx_order].tolist()
-        self.datashape = ds_
+        self.datashape = None
 
         rep_idx = self.axes_names.index("reps")
 
         def reshape_(data):
             d = data.transpose(*new_idx_order)
             if flatten_sweep:
-                d = d.reshape(*self.datashape[:rep_idx + 1], -1)
+                d = d.reshape(*ds_[:rep_idx + 1], -1)
+
+            if self.datashape is None:
+                self.datashape = d.shape
             return d
 
         for k, v in self.avg_iq.items():
             self.avg_iq[k] = reshape_(v)
         for k, v in self.buf_iq.items():
             self.buf_iq[k] = reshape_(v)
+
 
         if not mute:
             print("data_shape: ", self.datashape)
