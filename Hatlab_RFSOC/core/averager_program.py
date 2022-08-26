@@ -3,7 +3,7 @@ import warnings
 
 from tqdm import tqdm
 import numpy as np
-from qick.qick_asm import QickProgram
+from qick.qick_asm import QickProgram, FullSpeedGenManager
 
 from .pulses import add_gaussian, add_tanh
 
@@ -222,6 +222,47 @@ class FlatTopLengthSweep(QickSweep):
         self.reg.reset()
         if self.t_wait_reg is not None:
             self.t_wait_reg.reset()
+
+
+class FlatTopGainSweep(QickSweep):
+    """
+    Currently, the gain of the flat part of the flat_top pulse is controlled by a different register "gain2". So when we
+    sweep the gain of a flat_top pulse, gain2 needs to be swept at the same time.
+    """
+
+    def __init__(self, prog: QickProgram, gen_ch: str, start, stop, expts: int, label=None):
+        """
+        initialize a QickSweep object for sweeping the overall gain of a flat_top pulse. For convenience, generator
+        channel is passed so that both "gain" and "gain2" registers will be found automatically.
+
+        :param prog: QickProgram in which the sweep happens.
+        :param gen_ch: generator channel name for which the flat_top pulse gain will be swept
+        :param start: start value of the flat part length, in us.
+        :param stop: stop value of the flat part length, in us.
+        :param expts: number of experiment points between start and stop value.
+        :param label: label to be used for the loop tag in qick asm program.
+        """
+        self.gain_reg = prog.get_reg(gen_ch, "gain")
+        super().__init__(prog, self.gain_reg, start, stop, expts, label)
+
+        # flat part gain
+        self.gain2_reg = prog.get_reg(gen_ch, "gain2")
+        self.gain2_reg.init_val = start // 2
+        self.gain2_step = self.reg_step//2
+
+        if type(prog.gen_mgrs[self.gain_reg.gen_ch]) != FullSpeedGenManager:
+            raise NotImplementedError("gain sweep for flat top pulse of non-FullSpeedGen is not implemented yet")
+
+    def update(self):
+        # update both gain and gain2
+        self.prog.mathi(self.gain2_reg.page, self.gain2_reg.addr, self.gain2_reg.addr, '+', self.gain2_step)
+        super().update()
+
+
+    def reset(self):
+        # reset both gain and gain2
+        self.gain2_reg.reset()
+        super().reset()
 
 
 def merge_sweep(sweeps: List[QickSweep]) -> AbsQickSweep:
