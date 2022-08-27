@@ -1,8 +1,3 @@
-"""
-To demonstrate how to run a 2D sweep of driving length and freq, in which the length sweep is done in qick, and freq
-sweep is done in python. The experiment is managed with the Experiment class, which saves data to DataDict H5 after each
-qick sweep.
-"""
 import matplotlib.pyplot as plt
 from Hatlab_RFSOC.helpers import DataFromQDDH5
 from Hatlab_DataProcessing.post_selection import simpleSelection_1Qge

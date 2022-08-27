@@ -77,6 +77,14 @@ class QickRegister:
         else:
             return reg
 
+    def set_val(self, val):
+        """
+        set the register based on a given physical value
+        :param val: physical value in the unit of reg_type
+        :return:
+        """
+        self.prog.safe_regwi(self.page, self.addr, self.val2reg(val))
+
     def reset(self):
         """
         reset register value to its init_val
@@ -321,6 +329,7 @@ class APAveragerProgram(QickProgram):
         self.user_reg_dict = {}  # look up dict for registers defined in each generator channel
         self._user_regs = []  # (page, addr) of all user defined registers
         self.expts = None  # abstract variable for total number of experiments in each repetition.
+        self.readout_per_exp = None # software counter for number of readouts per experiment.
         self.declare_all_gens()
         self.declare_all_readouts()
 
@@ -491,7 +500,7 @@ class APAveragerProgram(QickProgram):
         """
         pass
 
-    def acquire_round(self, soc, threshold=None, angle=None, readouts_per_experiment=1, save_experiments=None,
+    def acquire_round(self, soc, threshold=None, angle=None, readouts_per_experiment=None, save_experiments=None,
                       load_pulses=True, start_src="internal", progress=False, debug=False):
         """
         This method optionally loads pulses on to the SoC, configures the ADC readouts, loads the machine code representation of the AveragerProgram onto the SoC, starts the program and streams the data into the Python, returning it as a set of numpy arrays.
@@ -505,7 +514,7 @@ class APAveragerProgram(QickProgram):
         :type threshold: int
         :param angle: rotation angle
         :type angle: list
-        :param readouts_per_experiment: readouts per experiment
+        :param readouts_per_experiment: readouts per experiment, by default, used the self.read_per_exp value counted in self.measure
         :type readouts_per_experiment: int
         :param save_experiments: saved readouts (by default, save all readouts)
         :type save_experiments: list
@@ -521,6 +530,8 @@ class APAveragerProgram(QickProgram):
             - avg_di (:py:class:`list`) - list of lists of averaged accumulated I data for ADCs 0 and 1
             - avg_dq (:py:class:`list`) - list of lists of averaged accumulated Q data for ADCs 0 and 1
         """
+        if readouts_per_experiment is None:
+            readouts_per_experiment = self.readout_per_exp
 
         if angle is None:
             angle = [0, 0]
@@ -620,7 +631,7 @@ class APAveragerProgram(QickProgram):
             (di[i] * np.cos(angle[i]) - dq[i] * np.sin(angle[i])) / self.ro_chs[ch].length - threshold[i], 0) for i, ch
             in enumerate(self.ro_chs)])
 
-    def acquire(self, soc, threshold=None, angle=None, load_pulses=True, readouts_per_experiment=1,
+    def acquire(self, soc, threshold=None, angle=None, load_pulses=True, readouts_per_experiment=None,
                 save_experiments=None, start_src="internal", progress=False, debug=False):
         """
         This method optionally loads pulses on to the SoC, configures the ADC readouts, loads the machine code representation of the AveragerProgram onto the SoC, starts the program and streams the data into the Python, returning it as a set of numpy arrays.
@@ -633,7 +644,7 @@ class APAveragerProgram(QickProgram):
         :type threshold: int
         :param angle: rotation angle
         :type angle: list
-        :param readouts_per_experiment: readouts per experiment
+        :param readouts_per_experiment: readouts per experiment, by default, use self.readout_per_exp value counted in self.measure
         :type readouts_per_experiment: int
         :param save_experiments: saved readouts (by default, save all readouts)
         :type save_experiments: list
@@ -650,6 +661,9 @@ class APAveragerProgram(QickProgram):
             - avg_di (:py:class:`list`) - list of lists of averaged accumulated I data for ADCs 0 and 1
             - avg_dq (:py:class:`list`) - list of lists of averaged accumulated Q data for ADCs 0 and 1
         """
+        if readouts_per_experiment is None:
+            readouts_per_experiment = self.readout_per_exp
+
         reps, expts, rounds = self.cfg['reps'], self.expts, self.cfg.get("rounds", 1)
         msmt_per_rep = expts * readouts_per_experiment
         tot_reps = reps * rounds
@@ -691,6 +705,40 @@ class APAveragerProgram(QickProgram):
 
         return expt_pts, avg_di / self.cfg["rounds"], avg_dq / self.cfg["rounds"]
 
+    def measure(self, adcs, pulse_ch=None, pins=None, adc_trig_offset=270, t='auto', wait=False, syncdelay=None,
+                add_count=True):
+        """Wrapper method that combines an ADC trigger, a pulse, and (optionally) the appropriate wait and a sync_all.
+        You must have already run set_pulse_registers for this channel. the readout count automatically adds one on each
+        time "measure" is called.
+
+        If you use wait=True, it's recommended to also specify a nonzero syncdelay.
+
+        Parameters
+        ----------
+        adcs : list of int
+            ADC channels (index in 'readouts' list)
+        pulse_ch : int or list of int
+            DAC channel(s) (index in 'gens' list)
+        pins : list of int, optional
+            refer to trigger()
+        adc_trig_offset : int, optional
+            refer to trigger()
+        t : int, optional
+            refer to pulse()
+        wait : bool, optional
+            Pause tProc execution until the end of the ADC readout window
+        syncdelay : int, optional
+            The number of additional tProc cycles to delay in the sync_all
+        add_count : bool, optional
+            when true, the readout counter register adds one after the readout
+        """
+        super().measure(adcs, pulse_ch, pins, adc_trig_offset, t, wait, syncdelay)
+        # automatically adds one to the readout count register.
+        if add_count:
+            if self.readout_per_exp is None:
+                self.readout_per_exp = 1
+            else:
+                self.readout_per_exp += 1
 
 class NDAveragerProgram(APAveragerProgram):
     """
@@ -743,10 +791,10 @@ class NDAveragerProgram(APAveragerProgram):
         rep_count = 14  # repetition counter
 
         n_sweeps = len(self.qick_sweeps)
+        if n_sweeps > 7: # to be safe, only register 15-21 in page 0 can be used
+            raise OverflowError(f"too many qick inner loops ({n_sweeps}), run out of counter registers")
         counter_regs = (
                 np.arange(n_sweeps) + 15).tolist()  # not sure why this has to be a list (np.array doesn't work)...
-        if counter_regs[-1] > 21:
-            raise OverflowError(f"too many qick inner loops ({n_sweeps}), run out of counter registers")
 
         p.regwi(0, rcount, 0)  # reset total run count
 
