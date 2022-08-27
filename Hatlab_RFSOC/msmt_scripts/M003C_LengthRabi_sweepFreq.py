@@ -26,7 +26,7 @@ from M003B_LengthRabi import LengthRabiProgram
 
 if __name__ == "__main__":
     soc, soccfg = getSocProxy(info["PyroServer"])
-    ADC_ch = info["ADC_ch"]
+    ADC_idx = info["ADC_idx"]
 
     expt_cfg = {
         "l_start": 0.01,

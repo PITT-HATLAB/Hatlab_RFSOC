@@ -56,7 +56,7 @@ class AmplitudeRabiProgram(NDAveragerProgram):
 
 if __name__ == "__main__":
     soc, soccfg = getSocProxy(info["PyroServer"])
-    ADC_ch = info["ADC_ch"]
+    ADC_idx = info["ADC_idx"]
 
     expt_cfg = {
         "g_start": -30000,
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     # Plotting Results
     plt.figure(1)
     plt.subplot(111, title=f"Amplitude Rabi", xlabel="Gain", ylabel="Qubit IQ")
-    plt.plot(x_pts, avgi[ADC_ch][:,0], 'o-', markersize=1)
-    plt.plot(x_pts, avgq[ADC_ch][:,0], 'o-', markersize=1)
+    plt.plot(x_pts, avgi[ADC_idx][:,0], 'o-', markersize=1)
+    plt.plot(x_pts, avgq[ADC_idx][:,0], 'o-', markersize=1)
 
 

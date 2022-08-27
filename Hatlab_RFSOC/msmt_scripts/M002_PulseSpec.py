@@ -69,12 +69,12 @@ if __name__ == "__main__":
     expt_pts, avgi, avgq = prog.acquire(soc, load_pulses=True,progress=True, debug=False)
 
     #Plotting Results
-    ADC_ch = info["ADC_ch"]
+    ADC_idx = info["ADC_idx"]
     sweepFreq = expt_pts[0] + config.get("qubit_mixer_freq", 0)
     plt.figure()
     plt.subplot(111,title="Qubit Spectroscopy", xlabel="Qubit Frequency (MHz)", ylabel="Qubit IQ")
-    plt.plot(sweepFreq, avgi[ADC_ch][0],'o-', markersize = 1)
-    plt.plot(sweepFreq, avgq[ADC_ch][0],'o-', markersize = 1)
+    plt.plot(sweepFreq, avgi[ADC_idx][0],'o-', markersize = 1)
+    plt.plot(sweepFreq, avgq[ADC_idx][0],'o-', markersize = 1)
     plt.show()
 
-    print(sweepFreq[np.argmax(avgq[ADC_ch][0])])
+    print(sweepFreq[np.argmax(avgq[ADC_idx][0])])

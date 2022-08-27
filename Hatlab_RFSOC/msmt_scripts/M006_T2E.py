@@ -71,7 +71,7 @@ class T2EProgram(NDAveragerProgram):
 
 if __name__ == "__main__":
     soc, soccfg = getSocProxy(info["PyroServer"])
-    ADC_ch = info["ADC_ch"]
+    ADC_idx = info["ADC_idx"]
 
     expt_cfg = {
         "t_start": 0.05,
@@ -93,11 +93,11 @@ if __name__ == "__main__":
     # Plotting Results
     plt.figure()
     plt.subplot(111, title=f"T2E", xlabel="time (us)", ylabel="Qubit IQ")
-    plt.plot(x_pts, avgi[ADC_ch][0], 'o-', markersize=1)
-    plt.plot(x_pts, avgq[ADC_ch][0], 'o-', markersize=1)
+    plt.plot(x_pts, avgi[ADC_idx][0], 'o-', markersize=1)
+    plt.plot(x_pts, avgq[ADC_idx][0], 'o-', markersize=1)
 
 
-    t2eDecay = qfr.T1Decay(x_pts, avgi[ADC_ch][0] + 1j * avgq[ADC_ch][0])
+    t2eDecay = qfr.T1Decay(x_pts, avgi[ADC_idx][0] + 1j * avgq[ADC_idx][0])
     t2eresult = t2eDecay.run(info["rotResult"])
     t2eresult.plot()
 

@@ -58,7 +58,7 @@ class AmplitudeRabiProgram(NDAveragerProgram):
 
 if __name__ == "__main__":
     soc, soccfg = getSocProxy(info["PyroServer"])
-    ADC_ch = info["ADC_ch"]
+    ADC_idx = info["ADC_idx"]
 
     expt_cfg = {
         "g_start": -30000,
@@ -80,21 +80,21 @@ if __name__ == "__main__":
     # Plotting Results
     plt.figure()
     plt.subplot(111, title=f"Amplitude Rabi", xlabel="Gain", ylabel="Qubit IQ")
-    plt.plot(x_pts, avgi[ADC_ch][0], 'o-', markersize=1)
-    plt.plot(x_pts, avgq[ADC_ch][0], 'o-', markersize=1)
+    plt.plot(x_pts, avgi[ADC_idx][0], 'o-', markersize=1)
+    plt.plot(x_pts, avgq[ADC_idx][0], 'o-', markersize=1)
 
-    piPul = qfr.PiPulseTuneUp(x_pts, avgi[ADC_ch][0] + 1j * avgq[ADC_ch][0])
+    piPul = qfr.PiPulseTuneUp(x_pts, avgi[ADC_idx][0] + 1j * avgq[ADC_idx][0])
     piResult = piPul.run()
     piResult.plot()
     piResult.print_ge_rotation()
 
     # histogram
     fig, ax = plt.subplots()
-    hist = ax.hist2d(prog.di_buf[ADC_ch], prog.dq_buf[ADC_ch], bins=101)#, range=[[-400, 400], [-400, 400]])
+    hist = ax.hist2d(prog.di_buf[ADC_idx], prog.dq_buf[ADC_idx], bins=101)#, range=[[-400, 400], [-400, 400]])
     ax.set_aspect(1)
     fig.colorbar(hist[3])
     plt.show()
 
     from Hatlab_DataProcessing.slider_plot.sliderPlot import sliderHist2d
-    sld = sliderHist2d(prog.di_buf_p[ADC_ch].T, prog.dq_buf_p[ADC_ch].T, {"amp":x_pts}, bins=101)
+    sld = sliderHist2d(prog.di_buf_p[ADC_idx].T, prog.dq_buf_p[ADC_idx].T, {"amp":x_pts}, bins=101)
 

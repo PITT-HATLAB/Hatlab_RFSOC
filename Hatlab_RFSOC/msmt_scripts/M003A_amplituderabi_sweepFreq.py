@@ -67,7 +67,7 @@ class AmplitudeRabiSweepFreqProgram(NDAveragerProgram):
 
 if __name__ == "__main__":
     soc, soccfg = getSocProxy(info["PyroServer"])
-    ADC_ch = info["ADC_ch"]
+    ADC_idx = info["ADC_idx"]
 
     expt_cfg = {
         "g_start": 0,
@@ -105,8 +105,8 @@ if __name__ == "__main__":
         dw.add_data(inner_sweeps=inner_sweeps, avg_i=avgi, avg_q=avgq)
 
     plt.figure()
-    plt.pcolormesh(freqList, gainList, avgi[ADC_ch][0].reshape((len(freqList),len(gainList))).T, shading="auto")
+    plt.pcolormesh(freqList, gainList, avgi[ADC_idx][0].reshape((len(freqList),len(gainList))).T, shading="auto")
     plt.figure()
-    plt.plot(gainList, avgi[ADC_ch][0].reshape((len(freqList),len(gainList)))[0])
+    plt.plot(gainList, avgi[ADC_idx][0].reshape((len(freqList),len(gainList)))[0])
 
 

@@ -54,10 +54,10 @@ rotResult = {'g_val': 126.02057122904796, 'e_val': -78.79001905612225, 'rot_angl
 dataPath = r"L:\Data\SNAIL_Pump_Limitation\\"
 sampleName = "Q3"
 
-ADC_ch = 1
+ADC_idx = 1
 
 info = {"PyroServer":PyroServer, "rotResult":rotResult, "dataPath":dataPath,
-        "sampleName":sampleName, "ADC_ch":ADC_ch}
+        "sampleName":sampleName, "ADC_idx":ADC_idx}
 
 
 print("cfg reloaded")

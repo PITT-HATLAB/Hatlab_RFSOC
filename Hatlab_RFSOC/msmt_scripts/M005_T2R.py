@@ -59,7 +59,7 @@ class T2RProgram(NDAveragerProgram):
 
 if __name__ == "__main__":
     soc, soccfg = getSocProxy(info["PyroServer"])
-    ADC_ch = info["ADC_ch"]
+    ADC_idx = info["ADC_idx"]
 
     expt_cfg = {
         "t_start": 0.05,
@@ -81,11 +81,11 @@ if __name__ == "__main__":
     # Plotting Results
     plt.figure()
     plt.subplot(111, title=f"T2R", xlabel="time (us)", ylabel="Qubit IQ")
-    plt.plot(x_pts, avgi[ADC_ch][0], 'o-', markersize=1)
-    plt.plot(x_pts, avgq[ADC_ch][0], 'o-', markersize=1)
+    plt.plot(x_pts, avgi[ADC_idx][0], 'o-', markersize=1)
+    plt.plot(x_pts, avgq[ADC_idx][0], 'o-', markersize=1)
 
 
-    t1Decay = qfr.T2Ramsey(x_pts, avgi[ADC_ch][0] + 1j * avgq[ADC_ch][0])
+    t1Decay = qfr.T2Ramsey(x_pts, avgi[ADC_idx][0] + 1j * avgq[ADC_idx][0])
     t1Result = t1Decay.run(info["rotResult"])
     t1Result.plot()
 
