@@ -29,36 +29,53 @@ class QickDataDict(DataDict):
         self.outer_sweeps = outer_sweeps
         self.inner_sweeps = inner_sweeps
 
-        dd = {
-            "msmts": {},
-            "reps": {},
-        }
+        dd = {"msmts": {}}
+        dd["__axis_values__"] = {"msmts": None}
+
 
         for k, v in outer_sweeps.items():
-            dd[k] = {"unit": v.get("unit"),
-                     "__list__": v.get("values")}  # metadata __list__ for easier access to the sweep variables
+            dd[k] = {"unit": v.get("unit")}
+            dd["__axis_values__"][k] = v.get("values")
+
+
+        dd["reps"] = {}
+        dd["__axis_values__"]["reps"] = None
 
         for k, v in inner_sweeps.items():
-            dd[k] = {"unit": v.get("unit"),
-                     "__list__": v.get("values")}  # metadata __list__ for easier access to the sweep variables
+            dd[k] = {"unit": v.get("unit")}
+            dd["__axis_values__"][k] = v.get("values")
+
+        dd["soft_reps"] = {}
+        dd["__axis_values__"]["soft_reps"] = None
 
         for ch in ro_chs:
             dd[f"avg_iq_{ch}"] = {
-                "axes": [*list(outer_sweeps.keys())[::-1], "reps", *list(inner_sweeps.keys())[::-1], "msmts"],
+                "axes": ["soft_reps", *list(outer_sweeps.keys())[::-1], "reps", *list(inner_sweeps.keys())[::-1],
+                         "msmts"],
                 # in the order of outer to inner axes
-                "unit": "a.u."
+                "unit": "a.u.",
+                "__isdata__":True
             }
             dd[f"buf_iq_{ch}"] = {
-                "axes": [*list(outer_sweeps.keys())[::-1], "reps", *list(inner_sweeps.keys())[::-1], "msmts"],
+                "axes": ["soft_reps", *list(outer_sweeps.keys())[::-1], "reps", *list(inner_sweeps.keys())[::-1],
+                         "msmts"],
+                # in the order of outer to inner axes
                 "unit": "a.u.",
+                "__isdata__": True
             }
-
         super().__init__(**dd)
 
     def add_data(self, avg_i, avg_q, buf_i=None, buf_q=None,
-                 inner_sweeps: Union[DataDict, DataDictBase, Dict] = None, **outer_sweeps) -> None:
+                 inner_sweeps: Union[DataDict, DataDictBase, Dict] = None, soft_rep=0, **outer_sweeps) -> None:
         """
         Function for adding data to DataDict after each qick tproc inner sweep.
+
+        At this point, there no requirement on the order of soft_rep and outer sweeps, e.g. you can sweep over all
+        outer sweeps in whatever order, then do soft repeat (repeat in python), or, you can do soft repeat of the qick
+        inner sweeps first, then sweep the outer parameters. The data-axes mapping relation will always be correct.
+
+        BUT, to make the data extraction methods in"DataFromQDDH5" work correctly, it is recommended to add data in
+        the order of outer_sweeps dict first (first key->last key), then add soft repeats.
 
         :param avg_i: averaged I data returned from qick.RAveragerProgram.acquire()
             (or other QickPrograms that uses the same data shape: (ro_ch, msmts, expts))
@@ -72,6 +89,7 @@ class QickDataDict(DataDict):
             to be first->last : innermost_sweep-> outermost_sweep. When the inner sweep values change for each new outer
             sweep value, the inner sweep values can be re-specified when each time we add data, otherwise, the values
             provided in initialize will be used.
+        :param soft_rep: soft repeat index
         :param outer_sweeps: kwargs for the new outer sweep values used in this data acquisition run.
 
         :return:
@@ -84,8 +102,11 @@ class QickDataDict(DataDict):
         flatten_inner = flattenSweepDict(inner_sweeps)  # assume inner sweeps have a square shape
         expts = len(list(flatten_inner.values())[0])  # total inner sweep points
 
+        # add msmt index data
         new_data["msmts"] = np.tile(range(msmt_per_exp), expts * reps)
+        self["__axis_values__"]["msmts"] = np.arange(msmt_per_exp)
 
+        # add iq data
         for i, ch in enumerate(self.ro_chs):
             new_data[f"avg_iq_{ch}"] = np.tile((avg_i[i] + 1j * avg_q[i]).transpose().flatten(), reps)
             if buf_i is not None:
@@ -93,13 +114,21 @@ class QickDataDict(DataDict):
             else:
                 new_data[f"buf_iq_{ch}"] = np.zeros(msmt_per_exp * expts)
 
+        # add qick repeat index data
         new_data["reps"] = np.repeat(np.arange(reps), msmt_per_exp * expts)
+        self["__axis_values__"]["reps"] = np.arange(reps)
 
+        # add qick inner sweep data
         for k, v in flatten_inner.items():
             new_data[k] = np.tile(np.repeat(v, msmt_per_exp), reps)
 
+        # add outer sweep data
         for k, v in outer_sweeps.items():
             new_data[k] = np.repeat([v], msmt_per_exp * expts * reps)
+
+        # add soft repeat index data
+        new_data["soft_reps"] = np.repeat([soft_rep], msmt_per_exp * expts * reps)
+        self["__axis_values__"]["soft_reps"] = np.arange(soft_rep+1)
 
         super().add_data(**new_data)
 
@@ -234,10 +263,8 @@ if __name__ == "__main__":
 
     for i, ch in enumerate(ro_chs):
         for m in range(n_msmts):
-            avgi[i, m] = (flattenSweepDict(inner_sweeps)["length"] + flattenSweepDict(inner_sweeps)["phase"]) * (
-                        m + 1) + i
-            avgq[i, m] = -(flattenSweepDict(inner_sweeps)["length"] + flattenSweepDict(inner_sweeps)["phase"]) * (
-                        m + 1) + i
+            avgi[i, m] = (flattenSweepDict(inner_sweeps)["length"] + flattenSweepDict(inner_sweeps)["phase"]) * (m + 1) + i
+            avgq[i, m] = -(flattenSweepDict(inner_sweeps)["length"] + flattenSweepDict(inner_sweeps)["phase"]) * (m + 1) + i
 
         bufi[i] = avgi[i].transpose().flatten() + (np.random.rand(reps, n_msmts * len(x1_pts) * len(x2_pts)) - 0.5) * 10
         bufq[i] = avgq[i].transpose().flatten() + (np.random.rand(reps, n_msmts * len(x1_pts) * len(x2_pts)) - 0.5) * 10

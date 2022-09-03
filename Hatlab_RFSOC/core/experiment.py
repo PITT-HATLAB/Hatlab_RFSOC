@@ -14,7 +14,7 @@ class Experiment():
                  inner_sweeps: DataDictBase = None, outer_sweeps: DataDictBase = None,
                  data_base_dir=None, data_folder_ame: str = None, data_file_name: str = None):
         """
-
+        todo: document
         :param program:
         :param cfg:
         :param info:
@@ -39,8 +39,8 @@ class Experiment():
         self.data_file_name = data_file_name
         self.ddw = None
 
-    def run(self, save_data=True, save_buf=False, readouts_per_experiment=1, save_experiments=None,
-            new_inner: Union[DataDictBase, Dict] = None, **outer_vals):
+    def run(self, save_data=True, save_buf=False, readouts_per_experiment=None, save_experiments=None,
+            new_inner: Union[DataDictBase, Dict] = None, soft_rep=0, **outer_vals):
         """
 
         :param save_data:
@@ -48,6 +48,7 @@ class Experiment():
         :param readouts_per_experiment:
         :param save_experiments:
         :param new_inner:
+        :param soft_rep:
         :param outer_vals:
         :return:
         """
@@ -63,21 +64,26 @@ class Experiment():
         else:
             ddw = DummyWriter()
 
-        # run program (and save data)
-        with ddw as dw:
-            dw.save_config(self.cfg)
+        ## run program (and save data)
+        if save_data:
+            if ddw.inserted_rows == 0:
+                ddw.__enter__()
+
+            ddw.save_config(self.cfg)
             self.prog = self.program(self.soccfg, self.cfg)
             x_pts, avgi, avgq = self.prog.acquire(self.soc, load_pulses=True, progress=True, debug=False,
-                                             readouts_per_experiment=readouts_per_experiment,
-                                             save_experiments=save_experiments)
+                                                  readouts_per_experiment=readouts_per_experiment,
+                                                  save_experiments=save_experiments)
             if save_buf:
-                dw.add_data(avg_i=avgi, avg_q=avgq, buf_i=self.prog.di_buf_p, buf_q=self.prog.dq_buf_p,
-                            inner_sweeps=inner_sweeps, **outer_vals)
+                ddw.add_data(avg_i=avgi, avg_q=avgq, buf_i=self.prog.di_buf_p, buf_q=self.prog.dq_buf_p,
+                            inner_sweeps=inner_sweeps, soft_rep=soft_rep, **outer_vals)
+                ddw.update_meta()
                 return x_pts, avgi, avgq, self.prog.di_buf_p, self.prog.dq_buf_p
             else:
-                dw.add_data(avg_i=avgi, avg_q=avgq, inner_sweeps=inner_sweeps, **outer_vals)
+                ddw.add_data(avg_i=avgi, avg_q=avgq, inner_sweeps=inner_sweeps, soft_rep=soft_rep, **outer_vals)
                 return x_pts, avgi, avgq
 
 
     def change_data_file(self, data_folder_name: str = None, data_file_name: str = None):
+        self.qdd = QickDataDict(self.cfg["ro_chs"], self.inner_sweeps, self.outer_sweeps)
         self.ddw = HatDDH5Writer(self.qdd, self.data_base_dir, data_folder_name, data_file_name)
