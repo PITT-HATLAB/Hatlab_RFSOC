@@ -2,7 +2,7 @@ from typing import List, Dict, Union
 import numpy as np
 
 from plottr.data.datadict import DataDict, DataDictBase
-from plottr.data.datadict_storage import datadict_from_hdf5
+from Hatlab_DataProcessing.data_saving import datadict_from_hdf5
 
 
 class QickDataDict(DataDict):
@@ -30,23 +30,21 @@ class QickDataDict(DataDict):
         self.inner_sweeps = inner_sweeps
 
         dd = {"msmts": {}}
-        dd["__axis_values__"] = {"msmts": None}
-
+        dd["__val_msmts__"] = None
 
         for k, v in outer_sweeps.items():
             dd[k] = {"unit": v.get("unit")}
-            dd["__axis_values__"][k] = v.get("values")
-
+            dd[f"__val_{k}__"] = v.get("values")
 
         dd["reps"] = {}
-        dd["__axis_values__"]["reps"] = None
+        dd["__val_reps__"] = None
 
         for k, v in inner_sweeps.items():
             dd[k] = {"unit": v.get("unit")}
-            dd["__axis_values__"][k] = v.get("values")
+            dd[f"__val_{k}__"] = v.get("values")
 
         dd["soft_reps"] = {}
-        dd["__axis_values__"]["soft_reps"] = None
+        dd["__val_soft_reps__"] = None
 
         for ch in ro_chs:
             dd[f"avg_iq_{ch}"] = {
@@ -54,7 +52,7 @@ class QickDataDict(DataDict):
                          "msmts"],
                 # in the order of outer to inner axes
                 "unit": "a.u.",
-                "__isdata__":True
+                "__isdata__": True
             }
             dd[f"buf_iq_{ch}"] = {
                 "axes": ["soft_reps", *list(outer_sweeps.keys())[::-1], "reps", *list(inner_sweeps.keys())[::-1],
@@ -104,7 +102,7 @@ class QickDataDict(DataDict):
 
         # add msmt index data
         new_data["msmts"] = np.tile(range(msmt_per_exp), expts * reps)
-        self["__axis_values__"]["msmts"] = np.arange(msmt_per_exp)
+        self["__val_msmts__"] = np.arange(msmt_per_exp)
 
         # add iq data
         for i, ch in enumerate(self.ro_chs):
@@ -116,7 +114,7 @@ class QickDataDict(DataDict):
 
         # add qick repeat index data
         new_data["reps"] = np.repeat(np.arange(reps), msmt_per_exp * expts)
-        self["__axis_values__"]["reps"] = np.arange(reps)
+        self["__val_reps__"] = np.arange(reps)
 
         # add qick inner sweep data
         for k, v in flatten_inner.items():
@@ -128,7 +126,7 @@ class QickDataDict(DataDict):
 
         # add soft repeat index data
         new_data["soft_reps"] = np.repeat([soft_rep], msmt_per_exp * expts * reps)
-        self["__axis_values__"]["soft_reps"] = np.arange(soft_rep+1)
+        self["__val_soft_reps__"] = np.arange(soft_rep + 1)
 
         super().add_data(**new_data)
 
@@ -153,16 +151,31 @@ def flattenSweepDict(sweeps: Union[DataDictBase, Dict]):
 
 
 class DataFromQDDH5:
-    def __init__(self, ddh5_path):
-        self.datadict = datadict_from_hdf5(ddh5_path)
+    def __init__(self, ddh5_path, merge_reps=True, progress=False, fast_load=True):
+        """
+        load data from a DDH5 file that was created from a QickDataDict object. Adds the loaded data to dictionaries
+        that are easy to use (avg_iq, buf_iq, axes). To ensure the correct order of axis values, the original data must
+        be created in the order of (outer->inner): (soft_rep, outer_sweeps, reps, inner_sweeps, msmts)
+
+        :param ddh5_path: path to the ddh5 file.
+        :param merge_reps: when True, the soft_reps and reps (qick inner reps) will be merged into one axes. For avg_iq,
+            the data from different soft repeat cycles will be averaged.
+        :param progress: when True, show a progress bar for data loading.
+        :param fast_load: when True, load the experiment data (avg_iq, buf_iq) only, and axes values will be loaded from
+            metadata.
+        """
+        self.datadict = datadict_from_hdf5(ddh5_path, progress=progress, data_only=fast_load)
         self.avg_iq = {}
         self.buf_iq = {}
         self.axes = {}
         self.ro_chs = []
-        self.reps = len(set(self.datadict["reps"]["values"]))
+        self.reps = self.datadict.meta_val("val_reps")[-1] + 1
+        self.soft_reps = self.datadict.meta_val("val_soft_reps")[-1] + 1
+        self.total_reps = self.reps * self.soft_reps
         self.axes_names = []
         self.datashape = []
 
+        # reshape original data based on the size of each sweep axes (including reps and msmts)
         for k, v in self.datadict.items():
             if "avg_iq" in k:
                 rch = k.replace("avg_iq_", "")
@@ -172,73 +185,64 @@ class DataFromQDDH5:
                 rch = k.replace("buf_iq_", "")
                 self.buf_iq[rch] = self._reshape_original_data(v)
 
-        self._get_axes_values()
+        if merge_reps:
+            self._merge_reps()
+        else:
+            rep_idx = self.axes_names.index("reps")
+            for k, v in self.avg_iq.items():
+                self.avg_iq[k] = np.moveaxis(v, rep_idx, 0)[0]
 
-        print("data_shape: ", self.datashape)
-        print("axes: ", self.axes_names)
+        print("buffer data shape: ", self.datashape)
+        print("buffer data axes: ", self.axes_names)
 
     def _reshape_original_data(self, data):
-        rep_idx = data["axes"].index("reps")
+        """
+        reshape original data based on the size of each sweep axes (including reps and msmts), and get the values of
+        each sweep axes.
+
+        :param data:
+        :return:
+        """
         data_shape = []
         if self.axes_names == []:
             self.axes_names = data["axes"]
         for ax in data["axes"]:
-            try:  # assume all the sweep axes have metadata "__list__"
-                ax_val = self.datadict.meta_val("list", ax)
+            try:  # assume all the sweep axis' values have been saved in metadata
+                # get values of each sweep axes from metadata
+                ax_val = self.datadict.meta_val(f"val_{ax}")
+                if ax not in self.axes:  # only need to add once
+                    self.axes[ax] = {"unit": self.datadict[ax].get("unit"), "values": ax_val}
                 data_shape.append(len(ax_val))
             except KeyError:
                 pass
-        data_shape.insert(rep_idx, self.reps)
 
-        data_r = np.array(data["values"]).reshape(*data_shape, -1)
+        data_r = np.array(data["values"]).reshape(*data_shape)
         self.datashape = list(data_r.shape)
 
         return data_r
 
-    def _get_axes_values(self):
-        for ax in self.axes_names:
-            if ax == "reps":
-                self.axes[ax] = {"unit": "n", "values": np.arange(self.reps)}
-            elif ax == "msmts":
-                self.axes[ax] = {"unit": "n", "values": np.arange(self.datashape[-1])}
-            else:  # assume all the sweep axes have metadata "__list__"
-                ax_val = self.datadict.meta_val("list", ax)
-                self.axes[ax] = {"unit": self.datadict[ax].get("unit"), "values": ax_val}
-
-    def reorder_data(self, axis_order: List[str] = None, flatten_sweep=False, mute=False):
-        if axis_order is None:
-            an_ = self.axes_names.copy()
-            an_.insert(0, an_.pop(an_.index("reps")))
-            axis_order = an_
-
-        new_idx_order = list(map(self.axes_names.index, axis_order))
-
-        self.axes_names = axis_order
-        axes_ = {k: self.axes[k] for k in axis_order}
-        self.axes = axes_
-        ds_ = np.array(self.datashape)[new_idx_order].tolist()
-        self.datashape = None
-
+    def _merge_reps(self):
+        """
+        merge the software repeats and the qick inner repeats into one axes.
+        :return:
+        """
         rep_idx = self.axes_names.index("reps")
-
-        def reshape_(data):
-            d = data.transpose(*new_idx_order)
-            if flatten_sweep:
-                d = d.reshape(*ds_[:rep_idx + 1], -1)
-
-            if self.datashape is None:
-                self.datashape = d.shape
-            return d
-
         for k, v in self.avg_iq.items():
-            self.avg_iq[k] = reshape_(v)
+            v = np.moveaxis(v, rep_idx, 1)
+            self.avg_iq[k] = np.average(v.reshape(-1, *v.shape[2:]), axis=0)
         for k, v in self.buf_iq.items():
-            self.buf_iq[k] = reshape_(v)
+            v = np.moveaxis(v, rep_idx, 1)
+            self.buf_iq[k] = v.reshape(-1, *v.shape[2:])
+        self.datashape = list(self.buf_iq[k].shape)
 
+        self.axes_names.pop(rep_idx)
+        self.axes_names[0] = "reps"
 
-        if not mute:
-            print("data_shape: ", self.datashape)
-            print("axes: ", self.axes_names)
+        _new_axes = {"reps": np.arange(self.total_reps)}
+        for k in self.axes_names[1:]:
+            _new_axes[k] = self.axes[k]
+        self.axes = _new_axes
+
 
 
 if __name__ == "__main__":
@@ -263,8 +267,10 @@ if __name__ == "__main__":
 
     for i, ch in enumerate(ro_chs):
         for m in range(n_msmts):
-            avgi[i, m] = (flattenSweepDict(inner_sweeps)["length"] + flattenSweepDict(inner_sweeps)["phase"]) * (m + 1) + i
-            avgq[i, m] = -(flattenSweepDict(inner_sweeps)["length"] + flattenSweepDict(inner_sweeps)["phase"]) * (m + 1) + i
+            avgi[i, m] = (flattenSweepDict(inner_sweeps)["length"] + flattenSweepDict(inner_sweeps)["phase"]) * (
+                        m + 1) + i
+            avgq[i, m] = -(flattenSweepDict(inner_sweeps)["length"] + flattenSweepDict(inner_sweeps)["phase"]) * (
+                        m + 1) + i
 
         bufi[i] = avgi[i].transpose().flatten() + (np.random.rand(reps, n_msmts * len(x1_pts) * len(x2_pts)) - 0.5) * 10
         bufq[i] = avgq[i].transpose().flatten() + (np.random.rand(reps, n_msmts * len(x1_pts) * len(x2_pts)) - 0.5) * 10
