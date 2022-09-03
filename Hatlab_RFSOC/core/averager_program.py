@@ -3,6 +3,7 @@ import warnings
 
 from tqdm import tqdm
 import numpy as np
+
 from qick.qick_asm import QickProgram, FullSpeedGenManager
 
 from .pulses import add_gaussian, add_tanh
@@ -256,7 +257,7 @@ class FlatTopGainSweep(QickSweep):
         # flat part gain
         self.gain2_reg = prog.get_reg(gen_ch, "gain2")
         self.gain2_reg.init_val = start // 2
-        self.gain2_step = self.reg_step//2
+        self.gain2_step = self.reg_step // 2
 
         if type(prog.gen_mgrs[self.gain_reg.gen_ch]) != FullSpeedGenManager:
             raise NotImplementedError("gain sweep for flat top pulse of non-FullSpeedGen is not implemented yet")
@@ -265,7 +266,6 @@ class FlatTopGainSweep(QickSweep):
         # update both gain and gain2
         self.prog.mathi(self.gain2_reg.page, self.gain2_reg.addr, self.gain2_reg.addr, '+', self.gain2_step)
         super().update()
-
 
     def reset(self):
         # reset both gain and gain2
@@ -329,7 +329,7 @@ class APAveragerProgram(QickProgram):
         self.user_reg_dict = {}  # look up dict for registers defined in each generator channel
         self._user_regs = []  # (page, addr) of all user defined registers
         self.expts = None  # abstract variable for total number of experiments in each repetition.
-        self.readout_per_exp = None # software counter for number of readouts per experiment.
+        self.readout_per_exp = None  # software counter for number of readouts per experiment.
         self.declare_all_gens()
         self.declare_all_readouts()
 
@@ -740,6 +740,7 @@ class APAveragerProgram(QickProgram):
             else:
                 self.readout_per_exp += 1
 
+
 class NDAveragerProgram(APAveragerProgram):
     """
     NDAveragerProgram class, for qubit experiments that sweep over multiple variables in qick.
@@ -791,7 +792,7 @@ class NDAveragerProgram(APAveragerProgram):
         rep_count = 14  # repetition counter
 
         n_sweeps = len(self.qick_sweeps)
-        if n_sweeps > 7: # to be safe, only register 15-21 in page 0 can be used
+        if n_sweeps > 7:  # to be safe, only register 15-21 in page 0 can be used
             raise OverflowError(f"too many qick inner loops ({n_sweeps}), run out of counter registers")
         counter_regs = (
                 np.arange(n_sweeps) + 15).tolist()  # not sure why this has to be a list (np.array doesn't work)...

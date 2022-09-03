@@ -1,6 +1,5 @@
 from qick import *
 import matplotlib.pyplot as plt
-import numpy as np
 
 from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ, declareMuxedGenAndReadout
 
@@ -129,11 +128,9 @@ class MuxedPulseSpecProgram_ef(PAveragerProgram):
         self.mathi(self.q_rp, self.r_freq_ef, self.r_freq_ef, '+', self.f_step)  # update frequency list index
 
 if __name__ == "__main__":
-    from Hatlab_RFSOC.helpers.dataTransfer import saveData
-    from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
     from Hatlab_DataProcessing.analyzer.rotateIQ import RotateData
 
-    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, rotResult, dataPath, sampleName, PyroServer
+    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, rotResult, PyroServer
     from Hatlab_RFSOC.proxy import getSocProxy
     soc, soccfg = getSocProxy(PyroServer)
 

@@ -7,20 +7,15 @@ qick sweep.
 from importlib import reload
 import M000_ConfigSel; reload(M000_ConfigSel) # just to make sure the data in config.py will update when running in same console
 
-import matplotlib.pyplot as plt
 import numpy as np
 from plottr.data import DataDict
 
 from Hatlab_RFSOC.proxy import getSocProxy
-from Hatlab_RFSOC.core.averager_program import NDAveragerProgram, FlatTopLengthSweep
-from Hatlab_RFSOC.core.experiment import Experiment
+from experiment import Experiment
 from Hatlab_RFSOC.helpers import get_sweep_vals
 
 
 from M000_ConfigSel import config, info
-from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
-
-
 
 from M003B_LengthRabi import LengthRabiProgram
 

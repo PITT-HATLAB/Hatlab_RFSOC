@@ -1,19 +1,15 @@
 # todo: write this as a function or class
 if __name__ == "__main__":
     from Hatlab_RFSOC.proxy import getSocProxy
-    from qick import *
-    import matplotlib.pyplot as plt
     import numpy as np
     import time
-    import lmfit
     from importlib import reload
     from tqdm import tqdm
 
-    from helpers.pulseConfig import set_pulse_registers_IQ
-    from helpers.dataTransfer import saveData
+    from data.data_transfer import saveData
     from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
 
-    from qubitMSMT.exampleConfig import config, rotResult, dataPath, sampleName, PyroServer
+    from qubitMSMT.exampleConfig import config, dataPath, sampleName, PyroServer
 
     from M004_T1 import T1Program
     from M005_T2R import RamseyProgram

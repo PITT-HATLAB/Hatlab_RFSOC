@@ -1,3 +1,6 @@
+import warnings
+warnings.warn(DeprecationWarning("this package uses the old methods, and will be removed soon"))
+
 from .M001_cavityResponse import CavityResponseProgram, MuxedCavityResponseProgram
 from .M002_pulsespec import PulseSpecProgram, MuxedPulseSpecProgram
 from .M003_amplituderabi import AmplitudeRabiProgram, MuxedAmplitudeRabiProgram

@@ -1,6 +1,5 @@
 from qick import *
 import matplotlib.pyplot as plt
-import numpy as np
 
 from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
 
@@ -74,9 +73,9 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
 
 
 if __name__ == "__main__":
-    from Hatlab_RFSOC.helpers.dataTransfer import saveData
+    from data.data_transfer import saveData
     from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
-    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, rotResult, dataPath, sampleName, PyroServer
+    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, dataPath, sampleName, PyroServer
     from Hatlab_RFSOC.proxy import getSocProxy
     import lmfit
     soc, soccfg = getSocProxy(PyroServer)

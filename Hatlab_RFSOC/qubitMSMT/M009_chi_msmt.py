@@ -1,15 +1,12 @@
 # todo: write this as a function or class
 
 from Hatlab_RFSOC.proxy import getSocProxy
-from qick import *
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
-from helpers.pulseConfig import set_pulse_registers_IQ
 
-from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, rotResult, dataPath, sampleName, PyroServer
+from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, PyroServer
 from M003_amplituderabi import AmplitudeRabiProgram
-from Hatlab_RFSOC.helpers.dataTransfer import saveData
 from Hatlab_DataProcessing.fitter import cavity_functions_hanger as cfr
 
 from instrumentserver.client import Client
@@ -63,7 +60,7 @@ print(f"chi from magnitude: {chi_fromMag} MHz")
 
 
 from importlib import reload
-import lmfit
+
 reload(cfr)
 
 

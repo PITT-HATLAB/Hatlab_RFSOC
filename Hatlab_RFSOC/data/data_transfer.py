@@ -1,6 +1,6 @@
 """
 This module was originally written for transferring data from RFSoC to local PC.
-We probably don't need these functions if we run experiments with pyro.
+We probably don't need these functions anymore if we run experiments with pyro.
 """
 
 
