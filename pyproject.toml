@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Hatlab_RFSOC"
+version = "0.1.0"
+authors = [
+    { name = 'Chao Zhou', email = 'chz78@pitt.edu' },
+]
+description = "Hatlab RFSoC control code based on the qick library"
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies=[
+    "qick @ git+https://github.com/hatlabcz/qick.git"
+]
+
+
+[project.optional-dependencies]
+data = [
+    "plottr @ git+https://github.com/PITT-HATLAB/plottr.git",
+    "Hatlab_DataProcessing @ git+https://github.com/hatlabcz/Hatlab_DataProcessing.git"
+]
+
+[project.urls]
+'Qick library' = 'https://github.com/openquantumhardware/qick'
+'Plottr library' = 'https://github.com/toolsforexperiments/plottr'
