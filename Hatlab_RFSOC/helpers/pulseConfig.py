@@ -63,6 +63,12 @@ def set_pulse_registers_IQ(prog: QickProgram, ch_I, ch_Q, skewPhase, IQScale, **
     :param kwargs: kwargs for "set_pulse_registers"
     :return:
     """
+
+    # pop the two keys in ro_chs[channel_name] that will not be used here, so that we can pass the whole channel config
+    # dict as keyword arguments, i.e. set_pulse_registers_IQ(**ro_chs[channel_name], **kwargs)
+    kwargs.pop("nqz", None)
+    kwargs.pop("ro_ch", None)
+
     gain_I = kwargs.pop("gain", None)
     gain_Q = int(gain_I * IQScale)
     phase_I = kwargs.pop("phase", None)

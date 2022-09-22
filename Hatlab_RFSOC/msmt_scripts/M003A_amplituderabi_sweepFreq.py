@@ -1,3 +1,7 @@
+"""
+To demonstrate how to run a 2D sweep of driving amplitude and freq, in which both sweeps are done in qick.
+The data is saved to plottr DDH5 format with the "HatDDH5Writer" manager
+"""
 from importlib import reload
 import M000_ConfigSel; reload(M000_ConfigSel) # just to make sure the data in config.py will update when running in same console
 
@@ -7,7 +11,8 @@ import numpy as np
 
 from Hatlab_RFSOC.proxy import getSocProxy
 from Hatlab_RFSOC.core.averager_program import NDAveragerProgram, QickSweep
-from Hatlab_RFSOC.helpers import add_prepare_msmt, get_sweep_vals, QickDataDict
+from Hatlab_RFSOC.helpers import add_prepare_msmt, get_sweep_vals
+from Hatlab_RFSOC.data import QickDataDict
 
 
 from M000_ConfigSel import config, info
@@ -29,7 +34,7 @@ class AmplitudeRabiSweepFreqProgram(NDAveragerProgram):
         self.set_pulse_params("q_drive", style="arb", waveform="q_gauss", phase=0,
                                 freq=cfg["f_start"], gain=cfg["g_start"])
 
-        # add qubit pulse gain  freq sweep
+        # add qubit pulse gain and freq sweep, first added will be first swept
         self.q_r_gain = self.get_reg("q_drive", "gain")
         self.q_r_gain_update = self.new_reg("q_drive", init_val=cfg["g_start"], name="gain_update")
         self.q_r_freq = self.get_reg("q_drive", "freq")

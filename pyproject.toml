@@ -11,15 +11,14 @@ authors = [
 description = "Hatlab RFSoC control code based on the qick library"
 readme = "README.md"
 requires-python = ">=3.7"
-dependencies=[
+dependencies = [
     "qick @ git+https://github.com/hatlabcz/qick.git"
 ]
 
 
 [project.optional-dependencies]
 data = [
-    "plottr @ git+https://github.com/PITT-HATLAB/plottr.git",
-    "Hatlab_DataProcessing @ git+https://github.com/hatlabcz/Hatlab_DataProcessing.git"
+    "plottr @ git+https://github.com/PITT-HATLAB/plottr.git"
 ]
 
 [project.urls]

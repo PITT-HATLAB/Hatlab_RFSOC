@@ -2,7 +2,7 @@ from typing import List, Dict, Union
 import numpy as np
 
 from plottr.data.datadict import DataDict, DataDictBase
-from Hatlab_DataProcessing.data_saving import datadict_from_hdf5
+from Hatlab_DataProcessing.data_saving import datadict_from_hdf5, HatDDH5Writer
 
 
 class QickDataDict(DataDict):
@@ -97,7 +97,7 @@ class QickDataDict(DataDict):
         reps = 1 if buf_i is None else buf_i.shape[-2]
         if inner_sweeps is None:
             inner_sweeps = self.inner_sweeps
-        flatten_inner = flattenSweepDict(inner_sweeps)  # assume inner sweeps have a square shape
+        flatten_inner = flatten_sweep_dict(inner_sweeps)  # assume inner sweeps have a square shape
         expts = len(list(flatten_inner.values())[0])  # total inner sweep points
 
         # add msmt index data
@@ -131,7 +131,7 @@ class QickDataDict(DataDict):
         super().add_data(**new_data)
 
 
-def flattenSweepDict(sweeps: Union[DataDictBase, Dict]):
+def flatten_sweep_dict(sweeps: Union[DataDictBase, Dict]):
     """
     Flatten a square sweep dictionary to 1d arrays.
 
@@ -148,6 +148,45 @@ def flattenSweepDict(sweeps: Union[DataDictBase, Dict]):
     for k in sweeps.keys():
         flatten_sweeps[k] = next(sweep_vals)
     return flatten_sweeps
+
+def dict_to_datadict(d:Dict):
+    """
+    converts a normal python dict to Data dict with "values" keys,
+    (for compatibility with functions that require a DataDict input)
+    :param d:
+    :return:
+    """
+    dd = DataDict()
+    for k, v in d.items():
+        dd[k] = {"values":v}
+    return dd
+
+
+def quick_save(filepath, filename, avg_i, avg_q, buf_i=None, buf_q=None, config=None, **sweep_params):
+    """
+    simply saves iq data points acquired from qick averager programs. Unlike the more complete data saving methods in
+    "Experiment" class, here we only save the qick inner sweep axes without units.
+    :param filepath: data file directory
+    :param filename: data file name
+    :param avg_i: avg_i data from qick averager programs
+    :param avg_q: avg_q data from qick averager programs
+    :param buf_i: buf_i data from qick averager programs
+    :param buf_q: buf_q data from qick averager programs
+    :param config: config dict
+    :param sweep_params: dict of qick sweep parameters
+    :return:
+    """
+    inner_sweeps = dict_to_datadict(sweep_params)
+    print(inner_sweeps)
+    qdd = QickDataDict(config["ro_chs"], inner_sweeps)
+    ddw = HatDDH5Writer(qdd, filepath, filename=filename)
+
+    with ddw as dw:
+        if config is not None:
+            dw.save_config(config)
+        dw.add_data(inner_sweeps=inner_sweeps, avg_i=avg_i, avg_q=avg_q, buf_i=buf_i, buf_q=buf_q)
+
+
 
 
 class DataFromQDDH5:
@@ -267,9 +306,9 @@ if __name__ == "__main__":
 
     for i, ch in enumerate(ro_chs):
         for m in range(n_msmts):
-            avgi[i, m] = (flattenSweepDict(inner_sweeps)["length"] + flattenSweepDict(inner_sweeps)["phase"]) * (
+            avgi[i, m] = (flatten_sweep_dict(inner_sweeps)["length"] + flatten_sweep_dict(inner_sweeps)["phase"]) * (
                         m + 1) + i
-            avgq[i, m] = -(flattenSweepDict(inner_sweeps)["length"] + flattenSweepDict(inner_sweeps)["phase"]) * (
+            avgq[i, m] = -(flatten_sweep_dict(inner_sweeps)["length"] + flatten_sweep_dict(inner_sweeps)["phase"]) * (
                         m + 1) + i
 
         bufi[i] = avgi[i].transpose().flatten() + (np.random.rand(reps, n_msmts * len(x1_pts) * len(x2_pts)) - 0.5) * 10
