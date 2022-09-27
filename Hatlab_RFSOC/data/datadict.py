@@ -177,7 +177,6 @@ def quick_save(filepath, filename, avg_i, avg_q, buf_i=None, buf_q=None, config=
     :return:
     """
     inner_sweeps = dict_to_datadict(sweep_params)
-    print(inner_sweeps)
     qdd = QickDataDict(config["ro_chs"], inner_sweeps)
     ddw = HatDDH5Writer(qdd, filepath, filename=filename)
 
