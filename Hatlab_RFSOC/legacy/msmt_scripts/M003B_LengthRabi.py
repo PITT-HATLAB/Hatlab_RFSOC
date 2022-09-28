@@ -1,12 +1,14 @@
+"""
+To demonstrate how to sweep the flat part length of a flat_top pulse.
+"""
+
 from importlib import reload
 import M000_ConfigSel; reload(M000_ConfigSel) # just to make sure the data in config.py will update when running in same console
 
 import matplotlib.pyplot as plt
-import numpy as np
-
 
 from Hatlab_RFSOC.proxy import getSocProxy
-from Hatlab_RFSOC.core.averager_program import NDAveragerProgram, QickSweep
+from Hatlab_RFSOC.core.averager_program import NDAveragerProgram, FlatTopLengthSweep
 from Hatlab_RFSOC.helpers.pulseConfig import add_prepare_msmt
 
 
@@ -14,7 +16,7 @@ from M000_ConfigSel import config, info
 from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
 
 
-class AmplitudeRabiProgram(NDAveragerProgram):
+class LengthRabiProgram(NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
         self.res_ch = self.cfg["gen_chs"]["muxed_res"]["ch"]
@@ -24,15 +26,20 @@ class AmplitudeRabiProgram(NDAveragerProgram):
         self.set_pulse_registers(ch=self.res_ch, style="const", length=cfg["res_length"], mask=[0, 1, 2, 3])
 
 
-        # add qubit pulse to q_drive channel
+        # add qubit pulse to q_drive channel, which is a flat_top pulse that raises and falls with the first and second half of a gaussian
         self.add_waveform_from_cfg("q_drive", "q_gauss")
-        self.set_pulse_params("q_drive", style="arb", waveform="q_gauss", phase=0,
-                                freq=cfg["q_pulse_cfg"]["ge_freq"], gain=cfg["g_start"])
+        self.set_pulse_params("q_drive", style="flat_top", waveform="q_gauss", phase=0,
+                                freq=cfg["q_pulse_cfg"]["ge_freq"], gain=cfg["gain"], length=cfg["l_start"])
 
-        # add qubit pulse gain sweep
-        self.q_r_gain = self.get_reg("q_drive", "gain")
-        self.q_r_gain_update = self.new_reg("q_drive", init_val=cfg["g_start"])
-        self.add_sweep(QickSweep(self, self.q_r_gain_update, cfg["g_start"], cfg["g_stop"], cfg["g_expts"]))
+        # sweeps the pulse flat part length, and waiting time in tproc after the pulse
+        self.t_r_wait = self.new_reg("q_drive", init_val=cfg["l_start"], reg_type="time", tproc_reg=True)
+        self.q_r_mode = self.get_reg("q_drive", "mode")
+        self.q_r_mode_update = self.new_reg("q_drive")
+        swp = FlatTopLengthSweep(self, self.q_r_mode_update, cfg["l_start"], cfg["l_stop"], cfg["l_expts"], self.t_r_wait)
+        self.add_sweep(swp)
+
+        # ramp part length
+        self.t_ramp_length_reg = self.t_r_wait.val2reg(cfg["waveforms"]["q_gauss"]["length"] + 0.02)
 
         self.sync_all(self.us2cycles(1))  # give processor some time to configure pulses
 
@@ -42,11 +49,17 @@ class AmplitudeRabiProgram(NDAveragerProgram):
 
         if sel_msmt:
             add_prepare_msmt(self, "q_drive", cfg["q_pulse_cfg"], "muxed_res", syncdelay=1)
+            # set the q drive pulse shape back to flat top
+            self.set_pulse_params("q_drive", style="flat_top", waveform="q_gauss", phase=0,
+                                  freq=cfg["q_pulse_cfg"]["ge_freq"], gain=cfg["gain"], length=cfg["l_start"])
 
+        # set the updated mode value (update pulse length)
+        self.mathi(self.q_r_mode.page, self.q_r_mode.addr, self.q_r_mode_update.addr, '+', 0)
         # drive and measure
-        self.mathi(self.q_r_gain.page, self.q_r_gain.addr, self.q_r_gain_update.addr, '+', 0)  # set the updated gain value
         self.pulse(ch=self.qubit_ch)  # play gaussian pulse
-        self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
+        self.synci(self.t_ramp_length_reg) # total ramp length (raising and lowering)
+        self.sync(self.t_r_wait.page, self.t_r_wait.addr)  # flat part width
+
         # --- msmt
         self.measure(pulse_ch=self.res_ch,
                      adcs=self.ro_chs,
@@ -61,9 +74,10 @@ if __name__ == "__main__":
     ADC_idx = info["ADC_idx"]
 
     expt_cfg = {
-        "g_start": -30000,
-        "g_stop": 30000,
-        "g_expts": 101,
+        "l_start": 0.01,
+        "l_stop": 1.01,
+        "l_expts": 101,
+        "gain": 3000,
 
         "reps": 200,
         "rounds": 1,
@@ -73,13 +87,14 @@ if __name__ == "__main__":
     }
     config.update(expt_cfg)  # combine configs
 
-    prog = AmplitudeRabiProgram(soccfg, config)
-    x_pts, avgi, avgq = prog.acquire(soc, load_pulses=True, progress=True, debug=False)
+    prog = LengthRabiProgram(soccfg, config)
+    x_pts, avgi, avgq = prog.acquire(soc, load_pulses=True, progress=True, debug=False,
+                                     readouts_per_experiment=int(expt_cfg["sel_msmt"])+1)
     x_pts = x_pts[0]
 
     # Plotting Results
     plt.figure()
-    plt.subplot(111, title=f"Amplitude Rabi", xlabel="Gain", ylabel="Qubit IQ")
+    plt.subplot(111, title=f"Length Rabi", xlabel="Length (us)", ylabel="Qubit IQ")
     plt.plot(x_pts, avgi[ADC_idx][0], 'o-', markersize=1)
     plt.plot(x_pts, avgq[ADC_idx][0], 'o-', markersize=1)
 

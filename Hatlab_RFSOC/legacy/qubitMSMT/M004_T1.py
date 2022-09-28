@@ -105,7 +105,7 @@ class MuxedT1Program(PAveragerProgram):
 
 if __name__ == "__main__":
     from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
-    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, rotResult, dataPath, sampleName, PyroServer
+    from legacy.qubitMSMT import config, rotResult, dataPath, sampleName, PyroServer
     from Hatlab_RFSOC.proxy import getSocProxy
     from data.data_transfer import saveData
     soc, soccfg = getSocProxy(PyroServer)

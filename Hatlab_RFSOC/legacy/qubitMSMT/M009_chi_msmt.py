@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
-from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, PyroServer
+from legacy.qubitMSMT import config, PyroServer
 from M003_amplituderabi import AmplitudeRabiProgram
 from Hatlab_DataProcessing.fitter import cavity_functions_hanger as cfr
 

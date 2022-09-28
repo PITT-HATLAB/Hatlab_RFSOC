@@ -75,7 +75,7 @@ class AmplitudeRabiProgram_ef(PAveragerProgram):
 if __name__ == "__main__":
     from data.data_transfer import saveData
     from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
-    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, dataPath, sampleName, PyroServer
+    from legacy.qubitMSMT import config, dataPath, sampleName, PyroServer
     from Hatlab_RFSOC.proxy import getSocProxy
     import lmfit
     soc, soccfg = getSocProxy(PyroServer)

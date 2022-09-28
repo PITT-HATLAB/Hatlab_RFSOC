@@ -22,6 +22,27 @@ def plotIQTrace(iq_list, ro_chs=None):
 
     plt.tight_layout()
 
+
+def plotAvgIQresults(xdata, avgi, avgq, title=None, xlabel=None, ylabel=None, sub_titles:list=None):
+    n_ch = len(avgi)
+    fig, axs = plt.subplots(1, n_ch, figsize=(n_ch * 6, 5))
+    if n_ch == 1:
+        axs = [axs]
+    for i, iq in enumerate(zip(avgi, avgq)):
+        plot = axs[i]
+        if (sub_titles is None) or (len(sub_titles) == 1):
+            plot.set_title(title)
+        else:
+            plot.set_title(sub_titles[i])
+        plot.plot(xdata, avgi[i][0], label="I value")
+        plot.plot(xdata, avgq[i][0], label="Q value")
+        plot.set_ylabel(ylabel)
+        plot.set_xlabel(xlabel)
+        plot.legend()
+    if n_ch > 1:
+        fig.suptitle(title)
+        plt.tight_layout()
+
     
 def plotIQHist2d(di_buf, dq_buf, ro_chs=None, bins=101):
     n_ch = len(di_buf)

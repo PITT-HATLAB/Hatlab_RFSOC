@@ -146,7 +146,7 @@ class MuxedAmplitudeRabiProgram(PAveragerProgram):
 
 if __name__ == "__main__":
     from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
-    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, PyroServer
+    from legacy.qubitMSMT import config, PyroServer
     from Hatlab_RFSOC.proxy import getSocProxy
 
     soc, soccfg = getSocProxy(PyroServer)

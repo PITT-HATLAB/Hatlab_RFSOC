@@ -130,7 +130,7 @@ class MuxedPulseSpecProgram_ef(PAveragerProgram):
 if __name__ == "__main__":
     from Hatlab_DataProcessing.analyzer.rotateIQ import RotateData
 
-    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, rotResult, PyroServer
+    from legacy.qubitMSMT import config, rotResult, PyroServer
     from Hatlab_RFSOC.proxy import getSocProxy
     soc, soccfg = getSocProxy(PyroServer)
 

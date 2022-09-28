@@ -1,9 +1,6 @@
 from importlib import reload
 import M000_ConfigSel; reload(M000_ConfigSel) # just to make sure the data in config.py will update when running in same console
 
-import matplotlib.pyplot as plt
-import numpy as np
-
 from Hatlab_RFSOC.proxy import getSocProxy
 import Hatlab_RFSOC.helpers.plotData as plotdata
 

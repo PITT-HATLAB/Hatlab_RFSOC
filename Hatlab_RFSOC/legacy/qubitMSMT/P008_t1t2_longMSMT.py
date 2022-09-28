@@ -2,7 +2,7 @@ import json
 import numpy as np
 from matplotlib import pyplot as plt
 from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
-from qubitMSMT.exampleConfig import config, rotResult, dataPath, sampleName
+from legacy.qubitMSMT import rotResult, dataPath, sampleName
 
 def loadData(fileName, filePath):
     with open(filePath+fileName, 'r') as infile:

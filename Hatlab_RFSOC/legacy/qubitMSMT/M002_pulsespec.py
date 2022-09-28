@@ -93,7 +93,7 @@ class MuxedPulseSpecProgram(PAveragerProgram):
 
 
 if __name__ == "__main__":
-    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, PyroServer
+    from legacy.qubitMSMT import config, PyroServer
     from Hatlab_RFSOC.proxy import getSocProxy
     soc, soccfg = getSocProxy(PyroServer)
 

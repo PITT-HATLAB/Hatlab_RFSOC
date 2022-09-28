@@ -1,6 +1,5 @@
 from qick import *
 import matplotlib.pyplot as plt
-import numpy as np
 
 from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ, declareMuxedGenAndReadout
 
@@ -55,7 +54,7 @@ class MuxedCavityResponseProgram(AveragerProgram):
 
 
 if __name__ == "__main__":
-    from Hatlab_RFSOC.qubitMSMT.exampleConfig import config, PyroServer
+    from legacy.qubitMSMT import config, PyroServer
     soc, soccfg = getSocProxy(PyroServer)
 
     ## ------------- to get response trace ----------------

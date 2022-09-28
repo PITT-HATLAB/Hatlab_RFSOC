@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from Hatlab_DataProcessing.analyzer import qubit_functions_rot as qfr
+from Hatlab_DataProcessing.fitter import qubit_functions as qf
+from Hatlab_DataProcessing.post_selection import simpleSelection_1Qge
 
 from Hatlab_RFSOC.proxy import getSocProxy
 from Hatlab_RFSOC.data import quick_save
@@ -22,9 +24,8 @@ if __name__ == "__main__":
         "g_expts": 101,
 
         "reps": 500,
-        "rounds": 1,
 
-        "sel_msmt": False
+        "sel_msmt": True
     }
     config.update(expt_cfg)  # combine configs
 
@@ -32,27 +33,30 @@ if __name__ == "__main__":
     x_pts, avgi, avgq = prog.acquire(soc, load_pulses=True, progress=True, debug=False)
     sweepGain = get_sweep_vals(config, "g")
 
-    # plot IQ result
-    plotData.plotAvgIQresults(sweepGain, avgi, avgq, title="Amplitude Rabi",
-                              xlabel="Gain (DAC)", ylabel="Qubit IQ", ro_chs=[ADC_idx])
+    # save data to ddh5
+    quick_save(info["dataPath"], f"{info['sampleName']}_ampRabi", avgi, avgq, prog.di_buf_p, prog.dq_buf_p, config=config, sweepGain=sweepGain)
 
-    # fit result
-    piPul = qfr.PiPulseTuneUp(sweepGain, avgi[ADC_idx][0] + 1j * avgq[ADC_idx][0])
-    piResult = piPul.run()
-    piResult.plot()
-    piResult.print_ge_rotation()
+    # data process
+    if not config["sel_msmt"]:
+        # plot IQ result
+        plotData.plotAvgIQresults(sweepGain, avgi, avgq, title="Amplitude Rabi",
+                                  xlabel="Gain (DAC)", ylabel="Qubit IQ")
 
-    # histogram
-    fig, ax = plt.subplots()
-    hist = ax.hist2d(prog.di_buf[ADC_idx], prog.dq_buf[ADC_idx], bins=101)#, range=[[-400, 400], [-400, 400]])
-    ax.set_aspect(1)
-    fig.colorbar(hist[3])
-    plt.show()
+        # fit IQ result
+        fit = qfr.PiPulseTuneUp(sweepGain, avgi[ADC_idx][0] + 1j * avgq[ADC_idx][0])
+        fitResult = fit.run()
+        fitResult.plot()
+        fitResult.print_ge_rotation()
+
+    else:
+        # post select and fit g_pct
+        bufi, bufq = prog.di_buf_p[ADC_idx], prog.dq_buf_p[ADC_idx]
+        g_pct, I_vld, Q_vld, selData = simpleSelection_1Qge(bufi, bufq)
+        fit = qf.PiPulseTuneUp(sweepGain, g_pct)
+        fitResult = fit.run()
+        fitResult.plot(xlabel="Gain (DAC)", ylabel="g pct")
+
 
     # # ----- slider hist2d ----------
     # from Hatlab_DataProcessing.slider_plot.sliderPlot import sliderHist2d
-    # sld = sliderHist2d(prog.di_buf_p[ADC_idx].T, prog.dq_buf_p[ADC_idx].T, {"amp":x_pts}, bins=101)
-
-    # save data to ddh5
-    quick_save(info["dataPath"], f"{info['sampleName']}_ampRabi", avgi, avgq, config=config, sweepGain=sweepGain)
-
+    # sld = sliderHist2d(bufi.T, bufq.T, {"gain":sweepGain}, bins=101)

@@ -106,7 +106,7 @@ def declareMuxedGenAndReadout(prog: QickProgram, res_ch: int, res_nqz: Literal[1
 
 
 def add_prepare_msmt(prog: QickProgram, q_drive_ch:str, q_pulse_cfg:dict, res_ch:str, syncdelay:float,
-                     prepare_q_gain:int=None, setback_q_gain:int=None):
+                     prepare_q_gain:int=None):
     """
     add a state preparation measurement to the qick asm program.
 
@@ -114,9 +114,8 @@ def add_prepare_msmt(prog: QickProgram, q_drive_ch:str, q_pulse_cfg:dict, res_ch
     :param q_drive_ch:
     :param q_pulse_cfg:
     :param res_ch:
-    :param syncdelay:
-    :param prepare_q_gain:
-    :param setback_q_gain:
+    :param syncdelay: time to wait after msmt, in us
+    :param prepare_q_gain: q drive gain for the prepare pulse
     :return:
     """
     # todo: maybe move this to somewhere else
@@ -124,7 +123,7 @@ def add_prepare_msmt(prog: QickProgram, q_drive_ch:str, q_pulse_cfg:dict, res_ch
     if prepare_q_gain is None:
         prepare_q_gain = q_pulse_cfg["pi2_gain"]
 
-    # play ~pi/2 pulse to ensure ~50% selection rate.
+    # play ~pi/n pulse to ensure ~50% selection rate.
     prog.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"], phase=q_pulse_cfg.get("phase", 0),
                           freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
     prog.pulse(ch=prog.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
@@ -138,8 +137,3 @@ def add_prepare_msmt(prog: QickProgram, q_drive_ch:str, q_pulse_cfg:dict, res_ch
                  adc_trig_offset=prog.cfg["adc_trig_offset"],
                  wait=True,
                  syncdelay=prog.us2cycles(syncdelay))
-
-    # set qubit channel gain back to pipulse gain (which is the gain we would usually use.)
-    if setback_q_gain is not None:
-        prog.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"], phase=q_pulse_cfg.get("phase", 0),
-                              freq=q_pulse_cfg["ge_freq"], gain=setback_q_gain)
