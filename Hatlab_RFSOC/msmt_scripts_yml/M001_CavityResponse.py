@@ -14,11 +14,11 @@ if __name__ == "__main__":
     config["reps"] = 1
 
     prog = msmt.CavityResponseProgram(soccfg, config)
-    mux_iq_list = prog.acquire_decimated(soc, load_pulses=True, progress=True, debug=False)
+    iq_list = prog.acquire_decimated(soc, load_pulses=True, progress=True, debug=False)
 
     # Plot results.
 
-    plotdata.plotIQTrace(mux_iq_list, [0])
+    plotdata.plotIQTrace(iq_list, [0])
 
 
 

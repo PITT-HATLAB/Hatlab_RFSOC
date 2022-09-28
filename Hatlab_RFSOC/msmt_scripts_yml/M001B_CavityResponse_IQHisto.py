@@ -16,7 +16,7 @@ if __name__ == "__main__":
     config.update(readout_cfg)
 
     prog = msmt.CavityResponseProgram(soccfg, config)
-    mux_iq_points = prog.acquire(soc, load_pulses=True, progress=True, debug=False)
+    iq_points = prog.acquire(soc, load_pulses=True, progress=True, debug=False)
     di_buf, dq_buf = prog.di_buf, prog.dq_buf
     plotdata.plotIQHist2d(di_buf, dq_buf, ro_chs=[0,1], bins=101)
 

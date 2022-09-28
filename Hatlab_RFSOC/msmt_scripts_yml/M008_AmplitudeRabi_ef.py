@@ -27,8 +27,8 @@ if __name__ == "__main__":
         "reps": 600,
         "sel_msmt": False,
         "prepare_g": False, # start qubit at g state, should only be True for temperature msmt,
-        "flip_back_g": True # when true, add an extra pipulse after ef_rabi. Usually the cavity is driven at best g/e
-                            # separation frequency, so setting this to True gives a better final msmt resolution.
+        "flip_back_g": True # when True, an extra pipulse will be added after ef_rabi. Usually the cavity is driven at
+                            # best g/e separation frequency, so setting this to True gives a better final msmt resolution.
         }
 
     config.update(expt_cfg)

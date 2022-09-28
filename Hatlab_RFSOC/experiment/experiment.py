@@ -45,7 +45,7 @@ class Experiment():
         self.ddw = None
 
     def run(self, save_data=True, save_buf=False, readouts_per_experiment=None, save_experiments: List = None,
-            new_inner: Union[DataDictBase, Dict] = None, soft_rep=0, **outer_vals):
+            new_inner: Union[DataDictBase, Dict] = None, soft_rep=0, inner_progress=True, **outer_vals):
         """
         run qick program and save data. By default, after each run, the new data will be appended to the same data file.
 
@@ -55,6 +55,7 @@ class Experiment():
         :param save_experiments: by default save all measurements.
         :param new_inner: the inner sweep dictionary can be updated in each run.
         :param soft_rep: index of soft repeat (average loop done in python)
+        :param inner_progress: when True, show the progress bar fo the qick inner sweep
         :param outer_vals: the values of the outer sweep used in this run
         :return:
         """
@@ -77,7 +78,7 @@ class Experiment():
 
             ddw.save_config(self.cfg)
             self.prog = self.program(self.soccfg, self.cfg)
-            x_pts, avgi, avgq = self.prog.acquire(self.soc, load_pulses=True, progress=True, debug=False,
+            x_pts, avgi, avgq = self.prog.acquire(self.soc, load_pulses=True, progress=inner_progress, debug=False,
                                                   readouts_per_experiment=readouts_per_experiment,
                                                   save_experiments=save_experiments)
             if save_buf:

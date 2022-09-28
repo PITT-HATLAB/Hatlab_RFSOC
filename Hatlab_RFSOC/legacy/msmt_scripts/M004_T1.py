@@ -41,6 +41,8 @@ class T1Program(NDAveragerProgram):
             add_prepare_msmt(self, "q_drive", cfg["q_pulse_cfg"], "muxed_res", syncdelay=1)
 
         # drive and measure
+        self.set_pulse_params("q_drive", style="arb", waveform="q_gauss", phase=0,
+                                freq=cfg["q_pulse_cfg"]["ge_freq"], gain=cfg["q_pulse_cfg"]["pi_gain"])
         self.pulse(ch=self.qubit_ch)  # play gaussian pulse
         self.sync_all()  # align channels and wait 50ns
         self.sync(self.t_r_wait.page, self.t_r_wait.addr)
