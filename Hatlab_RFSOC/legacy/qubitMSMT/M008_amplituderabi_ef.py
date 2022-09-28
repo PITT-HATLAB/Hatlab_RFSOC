@@ -1,7 +1,7 @@
 from qick import *
 import matplotlib.pyplot as plt
 
-from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
+from legacy.pulseConfig import set_pulse_registers_IQ
 
 
 class AmplitudeRabiProgram_ef(PAveragerProgram):

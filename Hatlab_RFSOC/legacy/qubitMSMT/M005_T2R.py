@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import warnings
 
-from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ, declareMuxedGenAndReadout
+from legacy.pulseConfig import set_pulse_registers_IQ, declareMuxedGenAndReadout
 
 class RamseyProgram(PAveragerProgram):
     def initialize(self):

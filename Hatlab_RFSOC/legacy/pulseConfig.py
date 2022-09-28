@@ -104,7 +104,6 @@ def declareMuxedGenAndReadout(prog: QickProgram, res_ch: int, res_nqz: Literal[1
                              gen_ch=res_ch)
 
 
-
 def add_prepare_msmt(prog: QickProgram, q_drive_ch:str, q_pulse_cfg:dict, res_ch:str, syncdelay:float,
                      prepare_q_gain:int=None):
     """

@@ -23,7 +23,7 @@ if __name__ == "__main__":
         "g_stop": 30000,
         "g_expts": 101,
 
-        "reps": 500,
+        "reps": 2000,
 
         "sel_msmt": True
     }

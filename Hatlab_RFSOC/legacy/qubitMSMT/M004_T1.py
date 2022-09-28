@@ -1,7 +1,7 @@
 from qick import *
 import matplotlib.pyplot as plt
 
-from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ, declareMuxedGenAndReadout
+from legacy.pulseConfig import set_pulse_registers_IQ, declareMuxedGenAndReadout
 
 
 class T1Program(PAveragerProgram):

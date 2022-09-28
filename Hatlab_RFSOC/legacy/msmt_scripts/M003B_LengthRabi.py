@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from Hatlab_RFSOC.proxy import getSocProxy
 from Hatlab_RFSOC.core.averager_program import NDAveragerProgram, FlatTopLengthSweep
-from Hatlab_RFSOC.helpers.pulseConfig import add_prepare_msmt
+from legacy.pulseConfig import add_prepare_msmt
 
 
 from M000_ConfigSel import config, info

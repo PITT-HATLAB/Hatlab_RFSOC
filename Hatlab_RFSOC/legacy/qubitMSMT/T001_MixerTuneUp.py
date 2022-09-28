@@ -3,10 +3,8 @@ from pprint import pprint
 
 from Hatlab_RFSOC.proxy import getSocProxy
 from qick import *
-import matplotlib.pyplot as plt
-import numpy as np
 
-from Hatlab_RFSOC.helpers.pulseConfig import set_pulse_registers_IQ
+from legacy.pulseConfig import set_pulse_registers_IQ
 
 
 class CWProgram(AveragerProgram):

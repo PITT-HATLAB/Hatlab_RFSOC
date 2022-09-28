@@ -1,8 +1,66 @@
+from typing import List
 from qick.averager_program import AveragerProgram
+from qick.qick_asm import QickProgram
 from Hatlab_RFSOC.core.averager_program import NDAveragerProgram, QickSweep
-from Hatlab_RFSOC.helpers.pulseConfig import add_prepare_msmt
 
-class CavityResponseProgram(AveragerProgram):
+class QubitMSMTMixin:
+    def set_pulse_registers_IQ(self: QickProgram, ch: List, skew_phase, IQ_scale, **kwargs):
+        """ set the pulse register for two DAC channels that are going to be sent to a IQ mixer.
+        :param self: qick program for which the pulses will be added
+        :param ch: IQ DAC channels, i.e. [ch_I, ch_Q]
+        :param skew_phase: pretuned skewPhase value for the IQ mixer (deg)
+        :param IQ_scale: pretuned IQ scale value for the IQ mixer
+        :param kwargs: kwargs for "set_pulse_registers"
+        :return:
+        """
+
+        # pop the two keys in ro_chs[channel_name] that will not be used here, so that we can pass the whole channel config
+        # dict as keyword arguments, i.e. set_pulse_registers_IQ(**ro_chs[channel_name], **kwargs)
+        ch_I, ch_Q = ch
+        kwargs.pop("nqz", None)
+        kwargs.pop("ro_ch", None)
+
+        gain_I = kwargs.pop("gain", None)
+        gain_Q = int(gain_I * IQ_scale)
+        phase_I = kwargs.pop("phase", None)
+        phase_Q = self.deg2reg(self.reg2deg(phase_I, ch_I) + skew_phase, ch_Q)
+
+        self.set_pulse_registers(ch=ch_I, phase=phase_I, gain=gain_I, **kwargs)
+        self.set_pulse_registers(ch=ch_Q, phase=phase_Q, gain=gain_Q, **kwargs)
+
+    def add_prepare_msmt(self:QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
+                         prepare_q_gain: int = None):
+        """
+        add a state preparation measurement to the qick asm program.
+
+        :param self:
+        :param q_drive_ch: Qubit drive channel name
+        :param q_pulse_cfg: Qubit drive pulse_cfg
+        :param res_ch: Resonator drive channel name
+        :param syncdelay: time to wait after msmt, in us
+        :param prepare_q_gain: q drive gain for the prepare pulse
+        :return:
+        """
+        if prepare_q_gain is None:
+            prepare_q_gain = q_pulse_cfg["pi2_gain"]
+
+        # play ~pi/n pulse to ensure ~50% selection rate.
+        self.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
+                              phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
+        self.pulse(ch=self.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
+
+        self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
+
+        # add measurement
+        self.measure(pulse_ch=self.cfg["gen_chs"][res_ch]["ch"],
+                     adcs=self.ro_chs,
+                     pins=[0],
+                     adc_trig_offset=self.cfg["adc_trig_offset"],
+                     wait=True,
+                     syncdelay=self.us2cycles(syncdelay))
+
+
+class CavityResponseProgram(QubitMSMTMixin, AveragerProgram):
     def initialize(self):
         cfg = self.cfg
         # declare muxed generator and readout channels
@@ -12,7 +70,13 @@ class CavityResponseProgram(AveragerProgram):
             self.declare_readout(**ro_cfg)
 
         # set readout pulse registers
-        self.set_pulse_registers(ch=self.res_ch, style="const", length=cfg["res_length"], mask=[0, 1, 2, 3])
+        if "skew_phase" in self.cfg["gen_chs"]["res_drive"]: # IQ channel
+            self.set_pulse_registers_IQ(**self.cfg["gen_chs"]["res_drive"], style="const", length=cfg["res_length"])
+        else:
+            try:
+                self.set_pulse_registers(ch=self.res_ch, style="const", length=cfg["res_length"], mask=[0, 1, 2, 3])
+            except RuntimeError:
+                self.set_pulse_registers(ch=self.res_ch, style="const", length=cfg["res_length"])
 
         self.synci(200)  # give processor some time to configure pulses
 
@@ -24,8 +88,7 @@ class CavityResponseProgram(AveragerProgram):
                      wait=True,
                      syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
-
-class PulseSpecProgram(NDAveragerProgram):
+class PulseSpecProgram(QubitMSMTMixin, NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
         self.res_ch = self.cfg["gen_chs"]["res_drive"]["ch"]
@@ -52,7 +115,7 @@ class PulseSpecProgram(NDAveragerProgram):
         sel_msmt = cfg.get("sel_msmt", False)
 
         if sel_msmt:
-            add_prepare_msmt(self, "q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
+            self.add_prepare_msmt("q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
 
         # set pulse shape to prob pulse
         self.set_pulse_params("q_drive", style="const", length=cfg["prob_length"],
@@ -69,7 +132,7 @@ class PulseSpecProgram(NDAveragerProgram):
                      wait=True,
                      syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
-class AmplitudeRabiProgram(NDAveragerProgram):
+class AmplitudeRabiProgram(QubitMSMTMixin, NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
         self.res_ch = self.cfg["gen_chs"]["res_drive"]["ch"]
@@ -96,7 +159,7 @@ class AmplitudeRabiProgram(NDAveragerProgram):
         sel_msmt = cfg.get("sel_msmt", False)
 
         if sel_msmt:
-            add_prepare_msmt(self, "q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
+            self.add_prepare_msmt("q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
 
         # drive and measure
         self.mathi(self.q_r_gain.page, self.q_r_gain.addr, self.q_r_gain_update.addr, '+', 0)  # set the updated gain value
@@ -110,7 +173,7 @@ class AmplitudeRabiProgram(NDAveragerProgram):
                      wait=True,
                      syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
-class T1Program(NDAveragerProgram):
+class T1Program(QubitMSMTMixin, NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
         self.res_ch = self.cfg["gen_chs"]["res_drive"]["ch"]
@@ -136,7 +199,7 @@ class T1Program(NDAveragerProgram):
         sel_msmt = cfg.get("sel_msmt", False)
 
         if sel_msmt:
-            add_prepare_msmt(self, "q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
+            self.add_prepare_msmt("q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
 
         # drive and measure
         self.set_pulse_params("q_drive", style="arb", waveform="q_gauss", phase=0,
@@ -152,7 +215,7 @@ class T1Program(NDAveragerProgram):
                      wait=True,
                      syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
-class T2RProgram(NDAveragerProgram):
+class T2RProgram(QubitMSMTMixin, NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
         self.res_ch = self.cfg["gen_chs"]["res_drive"]["ch"]
@@ -178,7 +241,7 @@ class T2RProgram(NDAveragerProgram):
         sel_msmt = cfg.get("sel_msmt", False)
 
         if sel_msmt:
-            add_prepare_msmt(self, "q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
+            self.add_prepare_msmt("q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
 
         # drive and measure
         self.set_pulse_params("q_drive", style="arb", waveform="q_gauss", phase=0,
@@ -196,7 +259,7 @@ class T2RProgram(NDAveragerProgram):
                      wait=True,
                      syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
-class T2EProgram(NDAveragerProgram):
+class T2EProgram(QubitMSMTMixin, NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
         self.res_ch = self.cfg["gen_chs"]["res_drive"]["ch"]
@@ -222,7 +285,7 @@ class T2EProgram(NDAveragerProgram):
         sel_msmt = cfg.get("sel_msmt", False)
 
         if sel_msmt:
-            add_prepare_msmt(self, "q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
+            self.add_prepare_msmt("q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
 
         # drive and measure
         # play pi/2 pulse
@@ -251,7 +314,7 @@ class T2EProgram(NDAveragerProgram):
                      syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
 
-class EfPulseSpecProgram(NDAveragerProgram):
+class EfPulseSpecProgram(QubitMSMTMixin, NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
         self.res_ch = self.cfg["gen_chs"]["res_drive"]["ch"]
@@ -278,7 +341,7 @@ class EfPulseSpecProgram(NDAveragerProgram):
         sel_msmt = cfg.get("sel_msmt", False)
 
         if sel_msmt:
-            add_prepare_msmt(self, "q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
+            self.add_prepare_msmt("q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
 
         # set and play ge gaussian pulse
         self.set_pulse_params("q_drive", style="arb", waveform="q_gauss", phase=0, freq=cfg["q_pulse_cfg"]["ge_freq"],
@@ -302,7 +365,7 @@ class EfPulseSpecProgram(NDAveragerProgram):
                      syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
 
-class EfRabiProgram(NDAveragerProgram):
+class EfRabiProgram(QubitMSMTMixin, NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
         self.res_ch = self.cfg["gen_chs"]["res_drive"]["ch"]
@@ -329,7 +392,7 @@ class EfRabiProgram(NDAveragerProgram):
         sel_msmt = cfg.get("sel_msmt", False)
 
         if sel_msmt:
-            add_prepare_msmt(self, "q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
+            self.add_prepare_msmt("q_drive", cfg["q_pulse_cfg"], "res_drive", syncdelay=cfg["msmt_leakout_time"])
 
         # set and play ge gaussian pulse
         if not cfg["prepare_g"]: # for temperature msmt

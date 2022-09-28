@@ -340,18 +340,17 @@ class APAveragerProgram(QickProgram):
         :return:
         """
         for gen_ch, kws in self.cfg["gen_chs"].items():
-            if ("ch_I" in kws) and ("ch_Q" in kws):
-                ch_i = kws.pop("ch_I")
-                ch_q = kws.pop("ch_Q")
-                for arg in ["skew_phase", "IQ_scale"]:
-                    try:
-                        kws.pop(arg)
-                    except AttributeError:
-                        pass
-                self.declare_gen(ch_i, **kws)
-                self.declare_gen(ch_q, **kws)  # todo: all the other functions doesn't support IQ channel gen yet...
-            else:
-                self.declare_gen(**kws)
+            try:
+                chs = [int(kws["ch"])]
+            except TypeError:
+                chs = kws["ch"]
+            declare_kws = {}
+            exclude_args = ["ch", "skew_phase", "IQ_scale"] # for cases when two DACs are used as IQ channels on a mixer
+            for arg, v in kws.items():
+                if not (arg in exclude_args):
+                    declare_kws[arg] = v
+            for ch in chs:
+                self.declare_gen(ch, **declare_kws) # todo: all the other functions doesn't support IQ channel gen yet...
             self.user_reg_dict[gen_ch] = {}
 
     def declare_all_readouts(self):
