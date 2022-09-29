@@ -10,6 +10,11 @@ from .pulses import add_gaussian, add_tanh
 
 RegisterTypes = Literal["freq", "time", "phase", "adc_freq"]
 
+try:
+    from rpyc.utils.classic import obtain
+except:
+    def obtain(i):
+        return i
 
 class QickRegister:
     def __init__(self, prog: QickProgram, page: int, addr: int, reg_type: RegisterTypes = None,
@@ -302,6 +307,7 @@ def merge_sweep(sweeps: List[QickSweep]) -> AbsQickSweep:
     return merged
 
 
+
 class APAveragerProgram(QickProgram):
     """
     APAveragerProgram class. "A" and "P" stands for "Automatic" and "Physical". This class automatically declares the
@@ -350,7 +356,7 @@ class APAveragerProgram(QickProgram):
                 if not (arg in exclude_args):
                     declare_kws[arg] = v
             for ch in chs:
-                self.declare_gen(ch, **declare_kws) # todo: all the other functions doesn't support IQ channel gen yet...
+                self.declare_gen(ch, **declare_kws) # todo: all the other functions doesn't support IQ channel gen yet.. e.g. set_pulse_params, get_reg, etc
             self.user_reg_dict[gen_ch] = {}
 
     def declare_all_readouts(self):
@@ -417,6 +423,22 @@ class APAveragerProgram(QickProgram):
 
         return reg
 
+    def pulse_param_to_reg(self, gen_ch, gen_ro_ch=None, **pulse_param):
+        """
+        converts some pulse parameters from physical values to regs
+        :param gen_cfg: generator config
+        :param pulse_param: kwargs in set_pulse_params
+        :return:
+        """
+        pulse_reg = pulse_param.copy()
+        if "freq" in pulse_param:
+            pulse_reg["freq"] = self.soccfg.freq2reg(pulse_param["freq"], gen_ch, gen_ro_ch)
+        if "phase" in pulse_param:
+            pulse_reg["phase"] = self.soccfg.deg2reg(pulse_param["phase"], gen_ch)
+        if "length" in pulse_param:
+            pulse_reg["length"] = self.soccfg.us2cycles(pulse_param["length"], gen_ch)
+        return pulse_reg
+
     def set_pulse_params(self, gen_ch: str, **kwargs):
         """
         This is a wrapper of the QickProgram.set_pulse_registers. Instead of taking register values, this function takes
@@ -449,15 +471,9 @@ class APAveragerProgram(QickProgram):
         mask : list of int
             for a muxed signal generator, the list of tones to enable for this pulse
         """
-        kw_reg = kwargs.copy()
-        gen_cgf = self.cfg["gen_chs"][gen_ch]
-        if "freq" in kwargs:
-            kw_reg["freq"] = self.soccfg.freq2reg(kwargs["freq"], gen_cgf["ch"], gen_cgf.get("ro_ch"))
-        if "phase" in kwargs:
-            kw_reg["phase"] = self.soccfg.deg2reg(kwargs["phase"], gen_cgf["ch"])
-        if "length" in kwargs:
-            kw_reg["length"] = self.soccfg.us2cycles(kwargs["length"], gen_cgf["ch"])
-        self.set_pulse_registers(gen_cgf["ch"], **kw_reg)
+        gen_cfg = self.cfg["gen_chs"][gen_ch]
+        kw_reg = self.pulse_param_to_reg(gen_cfg["ch"], gen_cfg.get("ro_ch"), **kwargs)
+        self.set_pulse_registers(gen_cfg["ch"], **kw_reg)
 
     def add_waveform(self, gen_ch, name, shape, **kwargs):
         """
@@ -703,6 +719,101 @@ class APAveragerProgram(QickProgram):
             self.dq_buf_p[:, reps * ii: reps * (ii + 1), :] = self.dq_buf.reshape(n_ro, reps, -1)
 
         return expt_pts, avg_di / self.cfg["rounds"], avg_dq / self.cfg["rounds"]
+
+    def acquire_decimated(self, soc, load_pulses=True, readouts_per_experiment=1, start_src="internal", progress=True, debug=False):
+        """
+        Copied from qick.AveragerProgram
+        This method acquires the raw (downconverted and decimated) data sampled by the ADC. This method is slow and mostly useful for lining up pulses or doing loopback tests.
+
+        config requirements:
+        "reps" = number of tProc loop repetitions;
+        "soft_avgs" = number of Python loop repetitions;
+
+        The data is returned as a list of ndarrays (one ndarray per readout channel).
+        There are two possible array formats.
+        reps = 1:
+        2D array with dimensions (2, length), indices (I/Q, sample)
+        reps > 1:
+        3D array with dimensions (reps, 2, length), indices (rep, I/Q, sample)
+        readouts_per_experiment>1:
+        3D array with dimensions (reps, expts, 2, length), indices (rep, expt, I/Q, sample)
+
+        :param soc: Qick object
+        :type soc: Qick object
+        :param load_pulses: If true, loads pulses into the tProc
+        :type load_pulses: bool
+        :param readouts_per_experiment: readouts per experiment (all will be saved)
+        :type readouts_per_experiment: int
+        :param start_src: "internal" (tProc starts immediately) or "external" (each soft_avg waits for an external trigger)
+        :type start_src: string
+        :param progress: If true, displays progress bar
+        :type progress: bool
+        :param debug: If true, displays assembly code for tProc program
+        :type debug: bool
+        :returns:
+            - iq_list (:py:class:`list`) - list of lists of averaged decimated I and Q data
+        """
+
+        reps = self.cfg['reps']
+        soft_avgs = self.cfg["soft_avgs"]
+
+        # load pulses onto soc
+        if load_pulses:
+            self.load_pulses(soc)
+
+        # Configure signal generators
+        self.config_gens(soc)
+
+        # Configure the readout down converters
+        self.config_readouts(soc)
+
+        # Initialize data buffers
+        d_buf = []
+        for ch, ro in self.ro_chs.items():
+            maxlen = self.soccfg['readouts'][ch]['buf_maxlen']
+            if ro.length*reps > maxlen:
+                raise RuntimeError("Warning: requested readout length (%d x %d reps) exceeds buffer size (%d)"%(ro.length, reps, maxlen))
+            d_buf.append(np.zeros((2, ro.length*reps*readouts_per_experiment)))
+
+        # load the program - it's always the same, so this only needs to be done once
+        self.load_program(soc, debug=debug)
+
+        # configure tproc for internal/external start
+        tproc = soc.tproc
+
+        soc.start_src(start_src)
+        # for each soft average, run and acquire decimated data
+        for ii in tqdm(range(soft_avgs), disable=not progress):
+
+            # Configure and enable buffer capture.
+            self.config_bufs(soc, enable_avg=True, enable_buf=True)
+
+            # make sure count variable is reset to 0
+            tproc.single_write(addr=1, data=0)
+
+            # run the assembly program
+            # if start_src="external", you must pulse the trigger input once for every soft_avg
+            tproc.start()
+
+            count = 0
+            while count < reps:
+                count = tproc.single_read(addr=1)
+
+            for ii, (ch, ro) in enumerate(self.ro_chs.items()):
+                d_buf[ii] += obtain(soc.get_decimated(ch=ch,
+                                    address=0, length=ro.length*reps*readouts_per_experiment))
+
+        # average the decimated data
+        if reps == 1 and readouts_per_experiment == 1:
+            return [d/soft_avgs for d in d_buf]
+        else:
+            # split the data into the individual reps:
+            # we reshape to slice each long buffer into reps,
+            # then use moveaxis() to transpose the I/Q and rep axes
+            result = [np.moveaxis(d.reshape(2, reps*readouts_per_experiment, -1), 0, 1)/soft_avgs for d in d_buf]
+            if reps > 1 and readouts_per_experiment > 1:
+                result = [d.reshape(reps, readouts_per_experiment, 2, -1) for d in result]
+            return result
 
     def measure(self, adcs, pulse_ch=None, pins=None, adc_trig_offset=270, t='auto', wait=False, syncdelay=None,
                 add_count=True):
