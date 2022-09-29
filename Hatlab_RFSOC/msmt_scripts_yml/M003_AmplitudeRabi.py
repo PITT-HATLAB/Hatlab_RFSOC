@@ -25,7 +25,7 @@ if __name__ == "__main__":
 
         "reps": 200,
 
-        "sel_msmt": True
+        "sel_msmt": False
     }
     config.update(expt_cfg)  # combine configs
 
