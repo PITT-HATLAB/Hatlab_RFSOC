@@ -81,9 +81,8 @@ class QubitMsmtMixin:
 class CavityResponseProgram(QubitMsmtMixin, NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
-        # declare muxed generator and readout channels
+        # declare res generator and readout channels
         self.res_ch = self.cfg["gen_chs"]["res_drive"]["ch"]
-        self.declare_gen(**cfg["gen_chs"]["res_drive"])
         for ro_cfg in cfg["ro_chs"].values():
             self.declare_readout(**ro_cfg)
 

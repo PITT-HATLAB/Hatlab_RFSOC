@@ -1,0 +1,42 @@
+# ---------------- qick configs ------------------
+config:
+    gen_chs:
+        res_drive: {ch: [5, 6], nqz: 1, skew_phase: 72.5, IQ_scale: 1.08, ro_ch: 0}
+        q_drive: {ch: 2, nqz: 2}
+
+    ro_chs:
+        ro_0: {ch: 0, freq: 90, length: 1000, gen_ch: 5}
+
+    waveforms:
+        q_gauss: {shape: gaussian, sigma: 0.01, length: 0.05}
+#        q_tanh: {shape: tanh_box, length: 0.08, ramp_width: 0.02}
+
+    q_pulse_cfg:
+        waveform: q_gauss
+        ge_freq: 4875.4821252
+        pi_gain: 12937
+        pi2_gain: 6519
+        t2r_freq: 4875.88
+        ef_freq: 4691.58
+
+    res_pulse_config:
+        style: const
+        freq: 90
+        gain: 10000
+        phase: 0
+        length: 2 # us
+
+    adc_trig_offset: 90  # [clock ticks]
+    relax_delay: 200  # [us]
+    msmt_leakout_time: 1 # [us] ~3*cavity_T1
+
+
+# ---------------- miscellaneous infos ------------------
+info:
+    PyroServer: myqick
+    rotResult: {'g_val': 64.89128673323867, 'e_val': -53.971107293686174, 'rot_angle': -45.18858649314396}
+    dataPath: L:\Data\chen_wang\cooldown_20220926\\
+    sampleName: ChenWang
+
+
+
