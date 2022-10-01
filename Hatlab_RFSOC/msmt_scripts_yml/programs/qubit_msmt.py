@@ -366,9 +366,14 @@ class EfPulseSpecProgram(QubitMsmtMixin, NDAveragerProgram):
         # set pulse to prob pulse
         self.set_pulse_params("q_drive", style="const", length=cfg["prob_length"], phase=0, freq=cfg["f_start"], gain=cfg["prob_gain"])
         self.mathi(self.q_r_freq.page, self.q_r_freq.addr, self.q_r_freq_update.addr, '+', 0)  # set the updated freq value
-
         self.pulse(ch=self.qubit_ch)  # play prob pulse
         self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
+
+        if cfg.get("flip_back_g", True): # for better final msmt resolution (usually the cavity is driven at best g/e separation)
+            self.set_pulse_params("q_drive", style="arb", waveform="q_gauss", phase=0, freq=cfg["q_pulse_cfg"]["ge_freq"],
+                                  gain=cfg["q_pulse_cfg"]["pi_gain"])
+            self.pulse(ch=self.qubit_ch)
+            self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
 
         # --- msmt
         self.measure(pulse_ch=self.res_ch,

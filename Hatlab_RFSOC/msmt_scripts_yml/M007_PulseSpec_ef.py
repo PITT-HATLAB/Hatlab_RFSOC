@@ -28,7 +28,9 @@ if __name__ == "__main__":
         "prob_gain": 100,
 
         "reps": 500,
-        "sel_msmt": False
+        "sel_msmt": False,
+        "flip_back_g": True # when True, an extra pipulse will be added after ef freq sweep. This gives a better final
+                            # msmt resolution when the cavity is driven at best g/e separation frequency.
         }
 
     config.update(expt_cfg)

@@ -32,6 +32,7 @@ class Experiment():
         :return:
         """
         self.PyroServer = info["PyroServer"]
+        self.info = info
         self.soc, self.soccfg = getSocProxy(self.PyroServer)
         self.program = program
         self.inner_sweeps = inner_sweeps
@@ -76,7 +77,7 @@ class Experiment():
             if ddw.inserted_rows == 0:
                 ddw.__enter__()
 
-            ddw.save_config(self.cfg)
+            ddw.save_config({"config":self.cfg, "info": self.info})
             self.prog = self.program(self.soccfg, self.cfg)
             x_pts, avgi, avgq = self.prog.acquire(self.soc, load_pulses=True, progress=inner_progress, debug=False,
                                                   readouts_per_experiment=readouts_per_experiment,
