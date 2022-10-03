@@ -244,13 +244,23 @@ class DataFromQDDH5:
         data_shape = []
         if self.axes_names == []:
             self.axes_names = data["axes"]
-        for ax in data["axes"]:
-            try:  # assume all the sweep axis' values have been saved in metadata
-                # get values of each sweep axes from metadata
+        for ax in data["axes"][::-1]: 
+            try:  
+                # get values of sweep axes from metadata if saved in metadata
                 ax_val = self.datadict.meta_val(f"val_{ax}")
+                ax_dim = len(ax_val)
+                if ax_val == "None": # sweep axis not saved in meta
+                    ax_dim = -1
+                    ax_val = None
+                #     # assume the data were added in order of sweep axes, this should give us the right axes values
+                #     if ax == "timestamp":
+                #         print(self.datadict[ax]["values"], data_shape)
+                #     last_layer_sweep_runs = np.product(data_shape)
+                #     vals = np.array(self.datadict[ax]["values"])[:last_layer_sweep_runs] #TODO: wrong here
+                #     ax_val = vals.reshape(-1, last_layer_sweep_runs)[:, 0]
                 if ax not in self.axes:  # only need to add once
                     self.axes[ax] = {"unit": self.datadict[ax].get("unit"), "values": ax_val}
-                data_shape.append(len(ax_val))
+                data_shape.insert(0, ax_dim)
             except KeyError:
                 pass
 
