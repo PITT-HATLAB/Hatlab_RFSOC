@@ -4,182 +4,12 @@ import warnings
 from tqdm import tqdm
 import numpy as np
 
-from qick.qick_asm import QickProgram, FullSpeedGenManager
+from qick.qick_asm import QickProgram, FullSpeedGenManager, QickRegister, QickRegisterManagerMixin
+from qick.averager_program import AbsQickSweep, QickSweep, NDAveragerProgram
 
 from .pulses import add_gaussian, add_tanh
 
 RegisterTypes = Literal["freq", "time", "phase", "adc_freq"]
-
-try:
-    from rpyc.utils.classic import obtain
-except:
-    def obtain(i):
-        return i
-
-class QickRegister:
-    def __init__(self, prog: QickProgram, page: int, addr: int, reg_type: RegisterTypes = None,
-                 gen_ch: int = None, ro_ch: int = None, init_val=None, name: str = None):
-        """
-        keeps the generator/readout channel and register type information, for automatically using them when converting
-        value to register.
-
-        :param prog: Qick program in which the register is used.
-        :param page: page of the register
-        :param addr: address of the register in the register page (the register number)
-        :param reg_type: type of the register, used for automatic conversion to values.
-        :param gen_ch: generator channel numer to which the register is associated with.
-        :param ro_ch: readout channel numer to which the register is associated with.
-        :param init_val: initial value of the register. If reg_type is not None, the value should be in its physical unit.
-        :param name: name of the register
-        """
-        self.prog = prog
-        self.page = page
-        self.addr = addr
-        self.type = reg_type
-        self.gen_ch = gen_ch
-        self.ro_ch = ro_ch
-        self.init_val = init_val
-        self.name = name
-        if init_val is not None:
-            self.reset()
-
-    def val2reg(self, val):
-        """
-        convert physical value to a qick register value
-        :param val:
-        :return:
-        """
-        if self.type == "freq":
-            return self.prog.freq2reg(val, self.gen_ch, self.ro_ch)
-        elif self.type == "time":
-            if self.gen_ch is not None:
-                return self.prog.us2cycles(val, self.gen_ch)
-            else:
-                return self.prog.us2cycles(val, self.gen_ch, self.ro_ch)
-        elif self.type == "phase":
-            return self.prog.deg2reg(val, self.gen_ch)
-        elif self.type == "adc_freq":
-            return self.prog.freq2reg_adc(val, self.ro_ch, self.gen_ch)
-        else:
-            return np.int32(val)
-
-    def reg2val(self, reg):
-        """
-        converts a qick register value to its value in physical units
-        :param reg:
-        :return:
-        """
-        if self.type == "freq":
-            return self.prog.reg2freq(reg, self.gen_ch)
-        elif self.type == "time":
-            if self.gen_ch is not None:
-                return self.prog.cycles2us(reg, self.gen_ch)
-            else:
-                return self.prog.cycles2us(reg, self.gen_ch, self.ro_ch)
-        elif self.type == "phase":
-            return self.prog.reg2deg(reg, self.gen_ch)
-        elif self.type == "adc_freq":
-            return self.prog.reg2freq_adc(reg, self.ro_ch)
-        else:
-            return reg
-
-    def set_val(self, val):
-        """
-        set the register based on a given physical value
-        :param val: physical value in the unit of reg_type
-        :return:
-        """
-        self.prog.safe_regwi(self.page, self.addr, self.val2reg(val))
-
-    def reset(self):
-        """
-        reset register value to its init_val
-        :return:
-        """
-        self.prog.safe_regwi(self.page, self.addr, self.val2reg(self.init_val))
-
-
-class AbsQickSweep:
-    """
-    Abstract QickSweep class.
-    """
-
-    def __init__(self, prog: QickProgram, label=None):
-        """
-        :param prog: QickProgram in which the sweep happens.
-        :param label: label to be used for the loop tag in qick asm program.
-        """
-        self.prog = prog
-        self.label = label
-        self.expts: int = None
-
-    def get_sweep_pts(self) -> Union[List, np.array]:
-        """
-        abstract method for getting the sweep values
-        """
-        pass
-
-    def update(self):
-        """
-        abstract method for updating a sweep
-        """
-        pass
-
-    def reset(self):
-        """
-        abstract method for resetting the sweep value at the beginning of each sweep.
-        """
-        pass
-
-
-class QickSweep(AbsQickSweep):
-    """
-    QickSweep class, describes a sweeps over a qick register.
-    """
-
-    def __init__(self, prog: QickProgram, reg: QickRegister, start, stop, expts: int, label=None):
-        """
-
-        :param prog: QickProgram in which the sweep happens.
-        :param reg: QickRegister object associated to the register to sweep.
-        :param start: start value of the register to sweep, in physical units
-        :param stop: stop value of the register to sweep, in physical units
-        :param expts: number of experiment points between start and stop value.
-        :param label: label to be used for the loop tag in qick asm program.
-        """
-        super().__init__(prog)
-        self.reg = reg
-        self.start = start
-        self.stop = stop
-        self.expts = expts
-        step_val = (stop - start) / (expts - 1)
-        self.reg_step = reg.val2reg(step_val)
-        self.reg.init_val = start
-
-        if label is None:
-            self.label = self.reg.name
-        else:
-            self.label = label
-
-    def get_sweep_pts(self):
-        return np.linspace(self.start, self.stop, self.expts)
-
-    def update(self):
-        """
-        update the register value. This will be called after finishing last register sweep.
-        This function should be overwritten if more complicated update is needed.
-        :return:
-        """
-        self.prog.mathi(self.reg.page, self.reg.addr, self.reg.addr, '+', self.reg_step)
-
-    def reset(self):
-        """
-        reset the register to the start value. will be called at the beginning of each sweep.
-        This function should be overwritten if more complicated reset is needed.
-        :return:
-        """
-        self.reg.reset()
-
 
 class FlatTopLengthSweep(QickSweep):
     """
@@ -203,9 +33,8 @@ class FlatTopLengthSweep(QickSweep):
             that equals to flat part length of the pulse.
         :param label: label to be used for the loop tag in qick asm program.
         """
-
         super().__init__(prog, mode_reg, start, stop, expts, label)
-
+        self.t_wait_reg = t_wait_reg
         # check length validity
         min_l, max_l = prog.cycles2us(2, self.reg.gen_ch), prog.cycles2us(2 ** 16, self.reg.gen_ch)
         for pl in [start, stop]:
@@ -213,24 +42,20 @@ class FlatTopLengthSweep(QickSweep):
                 raise RuntimeError(f"flat part length must be longer then {min_l} us, and shorter than {max_l} us")
 
         # overwrite the initial and step value in base class
-        step_val = (stop - start) / (expts - 1)
-        self.reg_step = prog.us2cycles(step_val, self.reg.gen_ch)
+        self.step_val = (stop - start) / (expts - 1)
+        self.reg_step = prog.us2cycles(self.step_val, self.reg.gen_ch)
         if self.reg_step == 0:
             warnings.warn(RuntimeWarning(f"sweep step for register {self.reg.name} is 0"))
 
         reg_start = prog.us2cycles(start, self.reg.gen_ch)
-        gen_mgr = prog.gen_mgrs[self.reg.gen_ch]
+        gen_mgr = prog._gen_mgrs[self.reg.gen_ch]
         self.reg.init_val = gen_mgr.get_mode_code(length=reg_start, mode="oneshot", outsel="dds")
-
-        # also sweep the wait time register in t_proc if provided
-        self.t_wait_reg = t_wait_reg
-        if t_wait_reg is not None:
-            self.t_wait_step = prog.us2cycles(step_val)
 
     def update(self):
         self.prog.mathi(self.reg.page, self.reg.addr, self.reg.addr, '+', self.reg_step)
+        # also sweep the wait time register in t_proc if provided
         if self.t_wait_reg is not None:
-            self.prog.mathi(self.t_wait_reg.page, self.t_wait_reg.addr, self.t_wait_reg.addr, '+', self.t_wait_step)
+            self.t_wait_reg.set_to(self.t_wait_reg, '+', self.step_val)
 
     def reset(self):
         self.reg.reset()
@@ -256,20 +81,21 @@ class FlatTopGainSweep(QickSweep):
         :param expts: number of experiment points between start and stop value.
         :param label: label to be used for the loop tag in qick asm program.
         """
-        self.gain_reg = prog.get_reg(gen_ch, "gain")
+        self.gain_reg = prog.get_gen_reg(gen_ch, "gain")
         super().__init__(prog, self.gain_reg, start, stop, expts, label)
 
         # flat part gain
-        self.gain2_reg = prog.get_reg(gen_ch, "gain2")
+        self.gain2_reg = prog.get_gen_reg(gen_ch, "gain2")
         self.gain2_reg.init_val = start // 2
-        self.gain2_step = self.reg_step // 2
+        self.gain2_step = self.step_val // 2
 
-        if type(prog.gen_mgrs[self.gain_reg.gen_ch]) != FullSpeedGenManager:
+        if type(prog._gen_mgrs[self.gain_reg.gen_ch]) != FullSpeedGenManager:
             raise NotImplementedError("gain sweep for flat top pulse of non-FullSpeedGen is not implemented yet")
 
     def update(self):
         # update both gain and gain2
-        self.prog.mathi(self.gain2_reg.page, self.gain2_reg.addr, self.gain2_reg.addr, '+', self.gain2_step)
+        # self.prog.mathi(self.gain2_reg.page, self.gain2_reg.addr, self.gain2_reg.addr, '+', self.gain2_step)
+        self.gain2_reg.set_to(self.gain2_reg, '+', self.gain2_step)
         super().update()
 
     def reset(self):
@@ -278,43 +104,14 @@ class FlatTopGainSweep(QickSweep):
         super().reset()
 
 
-def merge_sweep(sweeps: List[QickSweep]) -> AbsQickSweep:
-    """
-    create a new QickSweep object that merges the update and reset functions of multiple QickSweeps into one. This is
-    useful when multiple registers need to be updated at the same time in one sweep. The "label" and "get_sweep_pts" of
-    the first sweep in the list will be used for the merged sweep.
-    :param sweeps:
-    :return:
-    """
-    merged = AbsQickSweep(sweeps[0].prog, sweeps[0].label)
-    merged.get_sweep_pts = sweeps[0].get_sweep_pts
-    expts_ = set([swp.expts for swp in sweeps])
-    if len(expts_) != 1:
-        raise ValueError(f"all sweeps for merging must have same number of expts, got{expts_}")
-    merged.expts = sweeps[0].expts
 
-    def _update():
-        for swp in sweeps:
-            swp.update()
-
-    def _reset():
-        for swp in sweeps:
-            swp.reset()
-
-    merged.update = _update
-    merged.reset = _reset
-
-    return merged
-
-
-
-class APAveragerProgram(QickProgram):
+class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
     """
     APAveragerProgram class. "A" and "P" stands for "Automatic" and "Physical". This class automatically declares the
     generator and readout channels using the parameters provided in cfg["gen_chs"] and cfg["ro_chs"], and contains
     functions that hopefully can make it easier to program pulse sequences with parameters in their physical units
     (so that we don't have to constantly call "_2reg"/"_2cycles" functions).
-    The "acquire" methods are copied from qick.RAveragerProgram.
+    The "acquire" methods are copied from qick.AveragerProgram.
 
     config requirements:
     "gen_chs" = dictionary that contains the configuration of each generator channel;
@@ -332,8 +129,11 @@ class APAveragerProgram(QickProgram):
         """
         super().__init__(soccfg)
         self.cfg = cfg
-        self.user_reg_dict = {}  # look up dict for registers defined in each generator channel
-        self._user_regs = []  # (page, addr) of all user defined registers
+        self.reps = cfg["reps"]
+        if "soft_avgs" in cfg:
+            self.rounds = cfg['soft_avgs']
+        if "rounds" in cfg:
+            self.rounds = cfg['rounds']
         self.expts = None  # abstract variable for total number of experiments in each repetition.
         self.readout_per_exp = None  # software counter for number of readouts per experiment.
         self.declare_all_gens()
@@ -357,7 +157,6 @@ class APAveragerProgram(QickProgram):
                     declare_kws[arg] = v
             for ch in chs:
                 self.declare_gen(ch, **declare_kws) # todo: all the other functions doesn't support IQ channel gen yet.. e.g. set_pulse_params, get_reg, etc
-            self.user_reg_dict[gen_ch] = {}
 
     def declare_all_readouts(self):
         """
@@ -368,29 +167,28 @@ class APAveragerProgram(QickProgram):
         for ro_ch, kws in self.cfg["ro_chs"].items():
             self.declare_readout(**kws)
 
-    def get_reg(self, gen_ch: str, name: str) -> QickRegister:
+    def get_gen_reg(self, gen_ch: Union[str, int], name: str) -> QickRegister:
         """
         Gets tProc register page and address associated with gen_ch and register name. Creates a QickRegister object for
         return.
 
-        :param gen_ch: name of the generator channel, as in cfg["gen_chs"]
+        :param gen_ch: name of the generator channel, as in cfg["gen_chs"]. Or generator channel number
         :param name:  name of the qick register, as in QickProgram.pulse_registers
         :return: QickRegister
         """
-        gen_cgf = self.cfg["gen_chs"][gen_ch]
-        page = self.ch_page(gen_cgf["ch"])
-        addr = self.sreg(gen_cgf["ch"], name)
-        reg_type = name if name in RegisterTypes.__args__ else None
-        reg = QickRegister(self, page, addr, reg_type, gen_cgf["ch"], gen_cgf.get("ro_ch"), name=f"{gen_ch}_{name}")
-        return reg
+        if type(gen_ch) == str:
+            ch_num = self.cfg["gen_chs"][gen_ch]["ch"]
+        elif type(gen_ch) == int:
+            ch_num = gen_ch
+        return super().get_gen_reg(ch_num, name)
 
-    def new_reg(self, gen_ch: str, name: str = None, init_val=None, reg_type: RegisterTypes = None,
+    def new_gen_reg(self, gen_ch: Union[str, int], name: str = None, init_val=None, reg_type: RegisterTypes = None,
                 tproc_reg=False) -> QickRegister:
         """
         Declare a new register in the generator register page. Address automatically adds 1 one when each time a new
         register in the same page is declared.
 
-        :param gen_ch: name of the generator channel, as in cfg["gen_chs"]
+        :param gen_ch: name of the generator channel, as in cfg["gen_chs"]. Or generator channel number
         :param name: name of the new register. Optional.
         :param init_val: initial value for the register, when reg_type is provided, the reg_val should be in the unit of
             the corresponding type.
@@ -401,27 +199,11 @@ class APAveragerProgram(QickProgram):
             instead of the generator clock rate.
         :return: QickRegister
         """
-        gen_cgf = self.cfg["gen_chs"][gen_ch]
-        page = self.ch_page(gen_cgf["ch"])
-        addr = 1
-        while (page, addr) in self._user_regs:
-            addr += 1
-        if addr > 12:
-            raise ValueError(f"registers in page {page} ({gen_ch}) is full.")
-        self._user_regs.append((page, addr))
-
-        if name is None:
-            name = f"reg_{addr}"
-        if name in self.user_reg_dict[gen_ch].keys():
-            raise KeyError(f"register name '{name}' already exists for channel {gen_ch}")
-
-        if tproc_reg:
-            reg = QickRegister(self, page, addr, reg_type, None, None, init_val, name=name)
-        else:
-            reg = QickRegister(self, page, addr, reg_type, gen_cgf["ch"], gen_cgf.get("ro_ch"), init_val, name=name)
-        self.user_reg_dict[gen_ch][name] = reg
-
-        return reg
+        if type(gen_ch) == str:
+            ch_num = self.cfg["gen_chs"][gen_ch]["ch"]
+        elif type(gen_ch) == int:
+            ch_num = gen_ch
+        return super().new_gen_reg(ch_num, name, init_val, reg_type, tproc_reg)
 
     def pulse_param_to_reg(self, gen_ch, gen_ro_ch=None, **pulse_param):
         """
@@ -515,305 +297,13 @@ class APAveragerProgram(QickProgram):
         """
         pass
 
-    def acquire_round(self, soc, threshold=None, angle=None, readouts_per_experiment=None, save_experiments=None,
-                      load_pulses=True, start_src="internal", progress=False, debug=False):
-        """
-        This method optionally loads pulses on to the SoC, configures the ADC readouts, loads the machine code representation of the AveragerProgram onto the SoC, starts the program and streams the data into the Python, returning it as a set of numpy arrays.
-
-        config requirements:
-        "reps" = number of repetitions;
-
-        :param soc: Qick object
-        :type soc: Qick object
-        :param threshold: threshold
-        :type threshold: int
-        :param angle: rotation angle
-        :type angle: list
-        :param readouts_per_experiment: readouts per experiment, by default, used the self.read_per_exp value counted in self.measure
-        :type readouts_per_experiment: int
-        :param save_experiments: saved readouts (by default, save all readouts)
-        :type save_experiments: list
-        :param load_pulses: If true, loads pulses into the tProc
-        :type load_pulses: bool
-        :param start_src: "internal" (tProc starts immediately) or "external" (waits for an external trigger)
-        :type start_src: string
-        :param progress: If true, displays progress bar
-        :type progress: bool
-        :param debug: If true, displays assembly code for tProc program
-        :type debug: bool
-        :returns:
-            - avg_di (:py:class:`list`) - list of lists of averaged accumulated I data for ADCs 0 and 1
-            - avg_dq (:py:class:`list`) - list of lists of averaged accumulated Q data for ADCs 0 and 1
-        """
-        if readouts_per_experiment is None:
-            readouts_per_experiment = self.readout_per_exp
-
-        if angle is None:
-            angle = [0, 0]
-        if save_experiments is None:
-            save_experiments = range(readouts_per_experiment)
-        if load_pulses:
-            self.load_pulses(soc)
-
-        # Configure signal generators
-        self.config_gens(soc)
-
-        # Configure the readout down converters
-        self.config_readouts(soc)
-        self.config_bufs(soc, enable_avg=True, enable_buf=True)
-
-        # load this program into the soc's tproc
-        self.load_program(soc, debug=debug)
-
-        # configure tproc for internal/external start
-        soc.start_src(start_src)
-
-        reps, expts = self.cfg['reps'], self.expts
-
-        count = 0
-        total_count = reps * expts * readouts_per_experiment
-        n_ro = len(self.ro_chs)
-
-        d_buf = np.zeros((n_ro, 2, total_count))
-        self.stats = []
-
-        with tqdm(total=total_count, disable=not progress) as pbar:
-            soc.start_readout(total_count, counter_addr=1, ch_list=list(
-                self.ro_chs), reads_per_count=readouts_per_experiment)
-            while count < total_count:
-                new_data = soc.poll_data()
-                for d, s in new_data:
-                    new_points = d.shape[2]
-                    d_buf[:, :, count:count + new_points] = d
-                    count += new_points
-                    self.stats.append(s)
-                    pbar.update(new_points)
-
-        # reformat the data into separate I and Q arrays
-        di_buf = d_buf[:, 0, :]
-        dq_buf = d_buf[:, 1, :]
-
-        # save results to class in case you want to look at it later or for analysis
-        self.di_buf = di_buf
-        self.dq_buf = dq_buf
-
-        if threshold is not None:
-            self.shots = self.get_single_shots(
-                di_buf, dq_buf, threshold, angle)
-
-        expt_pts = self.get_expt_pts()
-
-        avg_di = np.zeros((n_ro, len(save_experiments), expts))
-        avg_dq = np.zeros((n_ro, len(save_experiments), expts))
-
-        for nn, ii in enumerate(save_experiments):
-            for i_ch, (ch, ro) in enumerate(self.ro_chs.items()):
-                if threshold is None:
-                    avg_di[i_ch][nn] = np.sum(di_buf[i_ch][ii::readouts_per_experiment].reshape(
-                        (reps, expts)), 0) / (reps) / ro.length
-                    avg_dq[i_ch][nn] = np.sum(dq_buf[i_ch][ii::readouts_per_experiment].reshape(
-                        (reps, expts)), 0) / (reps) / ro.length
-                else:
-                    avg_di[i_ch][nn] = np.sum(
-                        self.shots[i_ch][ii::readouts_per_experiment].reshape((reps, expts)), 0) / (reps)
-                    avg_dq = np.zeros(avg_di.shape)
-
-        return expt_pts, avg_di, avg_dq
-
-    def get_single_shots(self, di, dq, threshold, angle=None):
-        """
-        This method converts the raw I/Q data to single shots according to the threshold and rotation angle
-
-        :param di: Raw I data
-        :type di: list
-        :param dq: Raw Q data
-        :type dq: list
-        :param threshold: threshold
-        :type threshold: int
-        :param angle: rotation angle
-        :type angle: list
-
-        :returns:
-            - single_shot_array (:py:class:`array`) - Numpy array of single shot data
-
-        """
-
-        if angle is None:
-            angle = [0, 0]
-        if type(threshold) is int:
-            threshold = [threshold, threshold]
-        return np.array([np.heaviside(
-            (di[i] * np.cos(angle[i]) - dq[i] * np.sin(angle[i])) / self.ro_chs[ch].length - threshold[i], 0) for i, ch
-            in enumerate(self.ro_chs)])
-
-    def acquire(self, soc, threshold=None, angle=None, load_pulses=True, readouts_per_experiment=None,
-                save_experiments=None, start_src="internal", progress=False, debug=False):
-        """
-        This method optionally loads pulses on to the SoC, configures the ADC readouts, loads the machine code representation of the AveragerProgram onto the SoC, starts the program and streams the data into the Python, returning it as a set of numpy arrays.
-        config requirements:
-        "reps" = number of repetitions;
-
-        :param soc: Qick object
-        :type soc: Qick object
-        :param threshold: threshold
-        :type threshold: int
-        :param angle: rotation angle
-        :type angle: list
-        :param readouts_per_experiment: readouts per experiment, by default, use self.readout_per_exp value counted in self.measure
-        :type readouts_per_experiment: int
-        :param save_experiments: saved readouts (by default, save all readouts)
-        :type save_experiments: list
-        :param load_pulses: If true, loads pulses into the tProc
-        :type load_pulses: bool
-        :param start_src: "internal" (tProc starts immediately) or "external" (each round waits for an external trigger)
-        :type start_src: string
-        :param progress: If true, displays progress bar
-        :type progress: bool
-        :param debug: If true, displays assembly code for tProc program
-        :type debug: bool
-        :returns:
-            - expt_pts (:py:class:`list`) - list of experiment points
-            - avg_di (:py:class:`list`) - list of lists of averaged accumulated I data for ADCs 0 and 1
-            - avg_dq (:py:class:`list`) - list of lists of averaged accumulated Q data for ADCs 0 and 1
-        """
-        if readouts_per_experiment is None:
-            readouts_per_experiment = self.readout_per_exp
-
-        reps, expts, rounds = self.cfg['reps'], self.expts, self.cfg.get("rounds", 1)
-        msmt_per_rep = expts * readouts_per_experiment
-        tot_reps = reps * rounds
-        total_msmt = msmt_per_rep * tot_reps
-
-        n_ro = len(self.ro_chs)
-
-        self.di_buf_p = np.zeros((n_ro, tot_reps, msmt_per_rep))
-        self.dq_buf_p = np.zeros((n_ro, tot_reps, msmt_per_rep))
-
-        if angle is None:
-            angle = [0, 0]
-        if save_experiments is None:
-            save_experiments = range(readouts_per_experiment)
-        if "rounds" not in self.cfg or self.cfg["rounds"] == 1:
-            expt_pts, avg_di, avg_dq = self.acquire_round(soc, threshold=threshold, angle=angle,
-                                                          readouts_per_experiment=readouts_per_experiment,
-                                                          save_experiments=save_experiments, load_pulses=load_pulses,
-                                                          start_src=start_src, progress=progress, debug=debug)
-            self.di_buf_p = self.di_buf.reshape(n_ro, reps, -1)
-            self.dq_buf_p = self.dq_buf.reshape(n_ro, reps, -1)
-            return expt_pts, avg_di, avg_dq
-
-        avg_di = None
-        for ii in tqdm(range(rounds), disable=not progress):
-            expt_pts, avg_di0, avg_dq0 = self.acquire_round(soc, threshold=threshold, angle=angle,
-                                                            readouts_per_experiment=readouts_per_experiment,
-                                                            save_experiments=save_experiments, load_pulses=load_pulses,
-                                                            start_src=start_src, progress=progress, debug=debug)
-
-            if avg_di is None:
-                avg_di, avg_dq = avg_di0, avg_dq0
-            else:
-                avg_di += avg_di0
-                avg_dq += avg_dq0
-
-            self.di_buf_p[:, reps * ii: reps * (ii + 1), :] = self.di_buf.reshape(n_ro, reps, -1)
-            self.dq_buf_p[:, reps * ii: reps * (ii + 1), :] = self.dq_buf.reshape(n_ro, reps, -1)
-
-        return expt_pts, avg_di / self.cfg["rounds"], avg_dq / self.cfg["rounds"]
-
     def acquire_decimated(self, soc, load_pulses=True, readouts_per_experiment=1, start_src="internal", progress=True, debug=False):
         """
         Copied from qick.AveragerProgram
-        This method acquires the raw (downconverted and decimated) data sampled by the ADC. This method is slow and mostly useful for lining up pulses or doing loopback tests.
-
-        config requirements:
-        "reps" = number of tProc loop repetitions;
-        "soft_avgs" = number of Python loop repetitions;
-
-        The data is returned as a list of ndarrays (one ndarray per readout channel).
-        There are two possible array formats.
-        reps = 1:
-        2D array with dimensions (2, length), indices (I/Q, sample)
-        reps > 1:
-        3D array with dimensions (reps, 2, length), indices (rep, I/Q, sample)
-        readouts_per_experiment>1:
-        3D array with dimensions (reps, expts, 2, length), indices (rep, expt, I/Q, sample)
-
-        :param soc: Qick object
-        :type soc: Qick object
-        :param load_pulses: If true, loads pulses into the tProc
-        :type load_pulses: bool
-        :param readouts_per_experiment: readouts per experiment (all will be saved)
-        :type readouts_per_experiment: int
-        :param start_src: "internal" (tProc starts immediately) or "external" (each soft_avg waits for an external trigger)
-        :type start_src: string
-        :param progress: If true, displays progress bar
-        :type progress: bool
-        :param debug: If true, displays assembly code for tProc program
-        :type debug: bool
-        :returns:
-            - iq_list (:py:class:`list`) - list of lists of averaged decimated I and Q data
         """
-
-        reps = self.cfg['reps']
-        soft_avgs = self.cfg["soft_avgs"]
-
-        # load pulses onto soc
-        if load_pulses:
-            self.load_pulses(soc)
-
-        # Configure signal generators
-        self.config_gens(soc)
-
-        # Configure the readout down converters
-        self.config_readouts(soc)
-
-        # Initialize data buffers
-        d_buf = []
-        for ch, ro in self.ro_chs.items():
-            maxlen = self.soccfg['readouts'][ch]['buf_maxlen']
-            if ro.length*reps > maxlen:
-                raise RuntimeError("Warning: requested readout length (%d x %d reps) exceeds buffer size (%d)"%(ro.length, reps, maxlen))
-            d_buf.append(np.zeros((2, ro.length*reps*readouts_per_experiment)))
-
-        # load the program - it's always the same, so this only needs to be done once
-        self.load_program(soc, debug=debug)
-
-        # configure tproc for internal/external start
-        tproc = soc.tproc
-
-        soc.start_src(start_src)
-        # for each soft average, run and acquire decimated data
-        for ii in tqdm(range(soft_avgs), disable=not progress):
-
-            # Configure and enable buffer capture.
-            self.config_bufs(soc, enable_avg=True, enable_buf=True)
-
-            # make sure count variable is reset to 0
-            tproc.single_write(addr=1, data=0)
-
-            # run the assembly program
-            # if start_src="external", you must pulse the trigger input once for every soft_avg
-            tproc.start()
-
-            count = 0
-            while count < reps:
-                count = tproc.single_read(addr=1)
-
-            for ii, (ch, ro) in enumerate(self.ro_chs.items()):
-                d_buf[ii] += obtain(soc.get_decimated(ch=ch,
-                                    address=0, length=ro.length*reps*readouts_per_experiment))
-
-        # average the decimated data
-        if reps == 1 and readouts_per_experiment == 1:
-            return [d/soft_avgs for d in d_buf]
-        else:
-            # split the data into the individual reps:
-            # we reshape to slice each long buffer into reps,
-            # then use moveaxis() to transpose the I/Q and rep axes
-            result = [np.moveaxis(d.reshape(2, reps*readouts_per_experiment, -1), 0, 1)/soft_avgs for d in d_buf]
-            if reps > 1 and readouts_per_experiment > 1:
-                result = [d.reshape(reps, readouts_per_experiment, 2, -1) for d in result]
-            return result
+        buf = super().acquire_decimated(soc, reads_per_rep=readouts_per_experiment, load_pulses=load_pulses, start_src=start_src, progress=progress, debug=debug)
+        # move the I/Q axis from last to second-last
+        return np.moveaxis(buf, -1, -2)
 
     def measure(self, adcs, pulse_ch=None, pins=None, adc_trig_offset=270, t='auto', wait=False, syncdelay=None,
                 add_count=True):
@@ -853,7 +343,8 @@ class APAveragerProgram(QickProgram):
 
 class NDAveragerProgram(APAveragerProgram):
     """
-    NDAveragerProgram class, for qubit experiments that sweep over multiple variables in qick.
+    NDAveragerProgram class, for experiments that sweep over multiple variables in qick. The order of experiment runs
+    follow outer->inner: reps, sweep_n,... sweep_0.
 
     :param cfg: Configuration dictionary
     :type cfg: dict
@@ -866,28 +357,31 @@ class NDAveragerProgram(APAveragerProgram):
         super().__init__(soccfg, cfg)
         self.qick_sweeps: List[AbsQickSweep] = []
         self.expts = 1
+        self.sweep_axes = []
         self.make_program()
 
     def initialize(self):
         """
-        Abstract method for initializing the program and can include any instructions that are executed once at the beginning of the program.
+        Abstract method for initializing the program. Should include the instructions that will be executed once at the
+        beginning of the qick program.
         """
         pass
 
     def body(self):
         """
-        Abstract method for the body of the program
+        Abstract method for the body of the program.
         """
         pass
 
     def add_sweep(self, sweep: AbsQickSweep):
         """
-        Add a sweep to the qick asm program. The order of sweeping will follow first added first sweep.
+        Add a layer of register sweep to the qick asm program. The order of sweeping will follow first added first sweep.
         :param sweep:
         :return:
         """
         self.qick_sweeps.append(sweep)
         self.expts *= sweep.expts
+        self.sweep_axes.append(sweep.expts)
 
     def make_program(self):
         """
@@ -902,10 +396,9 @@ class NDAveragerProgram(APAveragerProgram):
         rep_count = 14  # repetition counter
 
         n_sweeps = len(self.qick_sweeps)
-        if n_sweeps > 7:  # to be safe, only register 15-21 in page 0 can be used
+        if n_sweeps > 7:  # to be safe, only register 15-21 in page 0 can be used as sweep counters
             raise OverflowError(f"too many qick inner loops ({n_sweeps}), run out of counter registers")
-        counter_regs = (
-                np.arange(n_sweeps) + 15).tolist()  # not sure why this has to be a list (np.array doesn't work)...
+        counter_regs = (np.arange(n_sweeps) + 15).tolist()  # not sure why this has to be a list (np.array doesn't work)
 
         p.regwi(0, rcount, 0)  # reset total run count
 
@@ -913,7 +406,7 @@ class NDAveragerProgram(APAveragerProgram):
         p.regwi(0, rep_count, self.cfg["reps"] - 1)
         p.label("LOOP_rep")
 
-        # add reset and staring tags for each sweep
+        # add reset and start tags for each sweep
         for creg, swp in zip(counter_regs[::-1], self.qick_sweeps[::-1]):
             swp.reset()
             p.regwi(0, creg, swp.expts - 1)
@@ -942,3 +435,83 @@ class NDAveragerProgram(APAveragerProgram):
         for swp in self.qick_sweeps:
             sweep_pts.append(swp.get_sweep_pts())
         return sweep_pts
+
+    def acquire(self, soc, threshold: int = None, angle: List = None, load_pulses=True, readouts_per_experiment=None,
+                save_experiments: List = None, start_src: str = "internal", progress=False, debug=False):
+        """
+        This method optionally loads pulses on to the SoC, configures the ADC readouts, loads the machine code
+        representation of the AveragerProgram onto the SoC, starts the program and streams the data into the Python,
+        returning it as a set of numpy arrays.
+        Note here the buf data has "reps" as the outermost axis, and the first swept parameter corresponds to the
+        innermost axis.
+
+        config requirements:
+        "reps" = number of repetitions;
+
+        :param soc: Qick object
+        :param threshold: threshold
+        :param angle: rotation angle
+        :param readouts_per_experiment: readouts per experiment
+        :param save_experiments: saved readouts (by default, save all readouts)
+        :param load_pulses: If true, loads pulses into the tProc
+        :param start_src: "internal" (tProc starts immediately) or "external" (each round waits for an external trigger)
+        :param progress: If true, displays progress bar
+        :param debug: If true, displays assembly code for tProc program
+        :returns:
+            - expt_pts (:py:class:`list`) - list of experiment points
+            - avg_di (:py:class:`list`) - list of lists of averaged accumulated I data for ADCs 0 and 1
+            - avg_dq (:py:class:`list`) - list of lists of averaged accumulated Q data for ADCs 0 and 1
+        """
+
+        self.shot_angle = angle
+        self.shot_threshold = threshold
+
+        if readouts_per_experiment is None:
+            readouts_per_experiment = self.readout_per_exp
+
+        if save_experiments is None:
+            save_experiments = range(readouts_per_experiment)
+
+        # avg_d calculated in QickProgram.acquire() assumes a different data shape, here we will recalculate based on
+        # the d_buf returned.
+        d_buf, avg_d, shots = super().acquire(soc, reads_per_rep=readouts_per_experiment, load_pulses=load_pulses,
+                                              start_src=start_src, progress=progress, debug=debug)
+
+        # reformat the data into separate I and Q arrays
+        # save results to class in case you want to look at it later or for analysis
+        self.di_buf = d_buf[:, :, 0]
+        self.dq_buf = d_buf[:, :, 1]
+
+        if threshold is not None:
+            self.shots = shots
+
+        expt_pts = self.get_expt_pts()
+
+        n_ro = len(self.ro_chs)
+        avg_di = np.zeros((n_ro, len(save_experiments), self.expts))
+        avg_dq = np.zeros((n_ro, len(save_experiments), self.expts))
+
+        for nn, ii in enumerate(save_experiments):
+            for i_ch, (ch, ro) in enumerate(self.ro_chs.items()):
+                avg_di[i_ch][nn] = avg_d[i_ch, ii, ..., 0]
+                avg_dq[i_ch][nn] = avg_d[i_ch, ii, ..., 1]
+
+        self.di_buf_p = self.di_buf.reshape(n_ro, self.reps, -1)
+        self.dq_buf_p = self.dq_buf.reshape(n_ro, self.reps, -1)
+
+        return expt_pts, avg_di, avg_dq
+
+    def _average_buf(self, d_reps, reads_per_rep: int):
+        """
+        overwrites the default _average_buf method in QickProgram. Here "reps" is the outermost axis, and we reshape
+        avg_d to the shape of the sweep axes.
+        :param d_reps:
+        :param reads_per_rep:
+        :return:
+        """
+        avg_d = np.zeros((len(self.ro_chs), reads_per_rep, self.expts, 2))
+        for ii in range(reads_per_rep):
+            for i_ch, (ch, ro) in enumerate(self.ro_chs.items()):
+                avg_d[i_ch][ii] = np.sum(d_reps[i_ch][ii::reads_per_rep, :].reshape((self.reps, self.expts, 2)),
+                                         axis=0) / (self.reps * ro['length'])
+        return avg_d

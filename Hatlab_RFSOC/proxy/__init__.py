@@ -30,9 +30,6 @@ def getSocProxy(server_name: str, ns_host: str = None):
     ns_port = 8888
     ns = Pyro4.locateNS(host=ns_host, port=ns_port)
 
-    # for k, v in ns.list().items():
-    #     print(k, v)
-
     soc = Pyro4.Proxy(ns.lookup(server_name))
     soccfg = QickConfig(soc.get_cfg())
     return soc, soccfg
