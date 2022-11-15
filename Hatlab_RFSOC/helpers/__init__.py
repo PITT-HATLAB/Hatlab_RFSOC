@@ -1,6 +1,6 @@
 import numpy as np
 from Hatlab_RFSOC.helpers import plotData
-
+from Hatlab_RFSOC.helpers.yaml_editor import update_yaml
 
 def get_sweep_vals(cfg: dict, var_name):
     return np.linspace(cfg[f"{var_name}_start"], cfg[f"{var_name}_stop"], cfg[f"{var_name}_expts"])
