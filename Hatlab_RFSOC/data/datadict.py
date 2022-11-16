@@ -98,7 +98,8 @@ class QickDataDict(DataDict):
         if inner_sweeps is None:
             inner_sweeps = self.inner_sweeps
         flatten_inner = flatten_sweep_dict(inner_sweeps)  # assume inner sweeps have a square shape
-        expts = len(list(flatten_inner.values())[0])  # total inner sweep points
+
+        expts = len(list(flatten_inner.values())[0]) if flatten_inner != {} else 1  # total inner sweep points
 
         # add msmt index data
         new_data["msmts"] = np.tile(range(msmt_per_exp), expts * reps)

@@ -3,6 +3,30 @@ from functools import reduce
 import ruamel.yaml as yaml
 
 
+def to_yaml_friendly(v):
+    """convert possible numpy type to native python types"""
+    if type(v) == str:
+        vv = v
+        return vv
+    if type(v) == dict:
+        vv = {}
+        for k_, v_ in v.items():
+            vv_ = to_yaml_friendly(v_)
+            vv[k_] = vv_
+        return vv
+    try:
+        if len(v) > 0:
+            try:
+                vv = v.tolist()
+            except AttributeError:
+                vv = v
+            return vv
+    except TypeError:
+        vv = float(v)
+        return vv
+
+
+
 def update_yaml(yamlPath, newParamDict: dict):
     """
     update a yaml config file with updated parameters, and keep the original format.
@@ -26,18 +50,10 @@ def update_yaml(yamlPath, newParamDict: dict):
         data_type =  type(get_by_path(root, items))
         get_by_path(root, items[:-1])[items[-1]] = data_type(value)
 
-    def type_convert(obj):
-        """convert numpy type to native python types"""
-        try:
-            converted_value = getattr(obj, "tolist", lambda: obj)()
-        except NameError:
-            converted_value = obj
-        return converted_value
-
 
     config, ind, bsi = yaml.util.load_yaml_guess_indent(open(yamlPath))
     for s, val in newParamDict.items():
-        set_by_path(config, s.split("."), type_convert(val))
+        set_by_path(config, s.split("."), to_yaml_friendly(val))
 
     new_yaml = yaml.YAML()
     new_yaml.default_flow_style = None
