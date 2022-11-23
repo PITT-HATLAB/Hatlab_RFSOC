@@ -4,6 +4,7 @@ from qick.qick_asm import QickProgram
 
 from Hatlab_RFSOC.proxy import getSocProxy
 from Hatlab_RFSOC.data import QickDataDict
+from Hatlab_RFSOC.helpers.yaml_editor import to_yaml_friendly
 from Hatlab_DataProcessing.data_saving import HatDDH5Writer, DummyWriter
 
 from plottr.data.datadict import DataDict, DataDictBase
@@ -77,7 +78,7 @@ class Experiment():
             if ddw.inserted_rows == 0:
                 ddw.__enter__()
 
-            ddw.save_config({"config":self.cfg, "info": self.info})
+            ddw.save_config(to_yaml_friendly({"config":self.cfg, "info": self.info}))
             self.prog = self.program(self.soccfg, self.cfg)
             x_pts, avgi, avgq = self.prog.acquire(self.soc, load_pulses=True, progress=inner_progress, debug=False,
                                                   readouts_per_experiment=readouts_per_experiment,
@@ -85,7 +86,6 @@ class Experiment():
             if save_buf:
                 ddw.add_data(avg_i=avgi, avg_q=avgq, buf_i=self.prog.di_buf_p, buf_q=self.prog.dq_buf_p,
                              inner_sweeps=inner_sweeps, soft_rep=soft_rep, **outer_vals)
-                ddw.update_meta()
                 return x_pts, avgi, avgq, self.prog.di_buf_p, self.prog.dq_buf_p
             else:
                 ddw.add_data(avg_i=avgi, avg_q=avgq, inner_sweeps=inner_sweeps, soft_rep=soft_rep, **outer_vals)

@@ -164,7 +164,8 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
 
         :return:
         """
-        for ro_ch, kws in self.cfg["ro_chs"].items():
+        ro_chs = self.cfg.get("ro_chs", {})
+        for ro_ch, kws in ro_chs.items():
             self.declare_readout(**kws)
 
     def get_gen_reg(self, gen_ch: Union[str, int], name: str) -> QickRegister:
