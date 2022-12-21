@@ -7,11 +7,11 @@ from Hatlab_DataProcessing.post_selection import simpleSelection_1Qge
 
 from Hatlab_RFSOC.proxy import getSocProxy
 from Hatlab_RFSOC.data import quick_save
-from Hatlab_RFSOC.helpers import get_sweep_vals, plotData
+from Hatlab_RFSOC.helpers import get_sweep_vals, plotData, update_yaml
 
 import programs as msmt
 
-from M000_ConfigSel import get_cfg_info
+from M000_ConfigSel import get_cfg_info, cfgFilePath
 config, info = get_cfg_info()
 
 if __name__ == "__main__":
@@ -46,7 +46,8 @@ if __name__ == "__main__":
         fit = qfr.PiPulseTuneUp(sweepGain, avgi[ADC_idx][0] + 1j * avgq[ADC_idx][0])
         fitResult = fit.run()
         fitResult.plot()
-        fitResult.print_ge_rotation()
+        rotResult = fitResult.print_ge_rotation()
+        update_yaml(cfgFilePath, {"info.rotResult": rotResult})
 
     else:
         # post select and fit g_pct
@@ -60,3 +61,7 @@ if __name__ == "__main__":
     # # ----- slider hist2d ----------
     # from Hatlab_DataProcessing.slider_plot.sliderPlot import sliderHist2d
     # sld = sliderHist2d(bufi.T, bufq.T, {"gain":sweepGain}, bins=101)
+
+    # ------- update pulse gain in yaml---------------
+    update_yaml(cfgFilePath, {"config.q_pulse_cfg.pi_gain": round(fitResult.params["pi_pulse_amp"].value),
+                              "config.q_pulse_cfg.pi2_gain": round(fitResult.params["pi_2_pulse_amp"].value)})

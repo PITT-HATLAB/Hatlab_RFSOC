@@ -99,6 +99,38 @@ class CavityResponseProgram(QubitMsmtMixin, NDAveragerProgram):
                      wait=True,
                      syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
+class PrepareQubitCavityResponseProgram(QubitMsmtMixin, NDAveragerProgram):
+    def initialize(self):
+        cfg = self.cfg
+        # declare res generator and readout channels
+        self.res_ch = self.cfg["gen_chs"]["res_drive"]["ch"]
+        self.qubit_ch = self.cfg["gen_chs"]["q_drive"]["ch"]
+
+        # set readout pulse registers
+        self.set_pulse_params_auto_gen_type("res_drive", **cfg["res_pulse_config"])
+
+        # set qubit prob pulse registers
+        self.add_waveform_from_cfg("q_drive", "q_gauss")
+        self.set_pulse_params("q_drive", style="arb", waveform="q_gauss", phase=0,
+                                freq=cfg["q_pulse_cfg"]["ge_freq"], gain=cfg["prepare_gain"])
+
+        self.synci(200)  # give processor some time to configure pulses
+
+    def body(self):
+        cfg = self.cfg
+        # drive and measure
+        self.set_pulse_params("q_drive", style="arb", waveform="q_gauss", phase=0,
+                                freq=cfg["q_pulse_cfg"]["ge_freq"], gain=cfg["prepare_gain"])
+
+        self.pulse(ch=self.qubit_ch)  # play gaussian pulse
+        self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
+
+        self.measure(pulse_ch=self.res_ch,
+                     adcs=self.ro_chs,
+                     pins=[0],
+                     adc_trig_offset=self.cfg["adc_trig_offset"],
+                     wait=True,
+                     syncdelay=self.us2cycles(self.cfg["relax_delay"]))
 
 class PulseSpecProgram(QubitMsmtMixin, NDAveragerProgram):
     def initialize(self):
