@@ -58,7 +58,7 @@ if __name__ == "__main__":
             axs[i].set_title(f"prepare e, delta={np.round(delta_list[i],5)} MHz, kappa/2pi={np.round(kappa_list[i],5)} MHz")
 
     chi = delta_list[0]-delta_list[1]
-    # this could give either positive or negative based on how the readout down-conversion circuit
+    # this could give either positive or negative value based on how the readout down-conversion circuit
     # was built (RF>LO or RF<L0) or which ADC nyquist zone was used. But the abs value should always be correct.
 
     print(f"!!!!!!!!!!!! kappa/2pi={np.average(kappa_list)} MHz")

@@ -166,7 +166,16 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
         """
         ro_chs = self.cfg.get("ro_chs", {})
         for ro_ch, kws in ro_chs.items():
-            self.declare_readout(**kws)
+            # self.declare_readout(**kws)
+            ch = kws["ch"]
+            if self.soccfg['readouts'][ch].get('tproc_ctrl') is None:
+                self.declare_readout(**kws)
+            else:
+                self.declare_readout(ch=ch, length=kws["length"])
+                freq_ro = self.freq2reg_adc(kws["freq"], ro_ch=ch, gen_ch=kws["gen_ch"])
+                self.set_readout_registers(ch=ch, freq=freq_ro, length=kws["length"], mode='oneshot',
+                                           outsel='product', phrst=kws["phrst"])
+
 
     def get_gen_reg(self, gen_ch: Union[str, int], name: str) -> QickRegister:
         """
@@ -304,7 +313,7 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
         """
         buf = super().acquire_decimated(soc, reads_per_rep=readouts_per_experiment, load_pulses=load_pulses, start_src=start_src, progress=progress, debug=debug)
         # move the I/Q axis from last to second-last
-        return np.moveaxis(buf, -1, -2)
+        return [np.moveaxis(d, -1, -2) for d in buf]
 
     def measure(self, adcs, pulse_ch=None, pins=None, adc_trig_offset=270, t='auto', wait=False, syncdelay=None,
                 add_count=True):
