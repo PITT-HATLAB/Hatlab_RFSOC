@@ -1,8 +1,44 @@
 from typing import List, Dict, Union
+import tempfile
 import numpy as np
+import h5py
 
 from plottr.data.datadict import DataDict, DataDictBase
+from plottr.data.datadict_storage import set_attr as dd_set_attr
 from Hatlab_DataProcessing.data_saving import datadict_from_hdf5, HatDDH5Writer
+
+
+def add_axis_meta(dd:Union[DataDictBase, Dict], ax_name: str, ax_value):
+    """
+    add the values of a sweep axis as metadata (hdf5 header attribute) for easier access in data loading
+    :param dd: datadict
+    :param ax_name: name of the sweep axis
+    :param ax_value: values of the sweep axis
+    :return:
+    """
+    # check if the header attribute is oversize or not
+    tf = tempfile.TemporaryFile()
+    try:
+        dd_set_attr(h5py.File(tf, "w"), ax_name, ax_value)
+        header_settable = True
+    except RuntimeError:
+        header_settable = False
+    finally:
+        tf.close()
+
+    # if oversize, try to rewrite the value array as an eval np.arange string
+    if not header_settable:
+        # check if the value can be represented as a np.arange expression
+        steps = ax_value[1:] - ax_value[:-1]
+        if len(set(steps)) > 1:
+            raise NotImplementedError(f"can't write {ax_name} with value {ax_value} as a np.arrange expression")
+        else:
+            step = steps[0]
+        newval = f"eval__np.arange({ax_value[0]}, {ax_value[-1] + step }, {step})" # we will decode this in data loading
+    else:
+        newval = ax_value
+
+    dd[f"__val_{ax_name}__"] = newval
 
 
 class QickDataDict(DataDict):
@@ -30,21 +66,21 @@ class QickDataDict(DataDict):
         self.inner_sweeps = inner_sweeps
 
         dd = {"msmts": {}}
-        dd["__val_msmts__"] = None
+        add_axis_meta(dd, "msmts", None)
 
         for k, v in outer_sweeps.items():
             dd[k] = {"unit": v.get("unit")}
-            dd[f"__val_{k}__"] = v.get("values")
+            add_axis_meta(dd, k, v.get("values"))
 
         dd["reps"] = {}
-        dd["__val_reps__"] = None
+        add_axis_meta(dd, "reps", None)
 
         for k, v in inner_sweeps.items():
             dd[k] = {"unit": v.get("unit")}
-            dd[f"__val_{k}__"] = v.get("values")
+            add_axis_meta(dd, k, v.get("values"))
 
         dd["soft_reps"] = {}
-        dd["__val_soft_reps__"] = None
+        add_axis_meta(dd, "soft_reps", None)
 
         for ch in ro_chs:
             dd[f"avg_iq_{ch}"] = {
@@ -103,7 +139,8 @@ class QickDataDict(DataDict):
 
         # add msmt index data
         new_data["msmts"] = np.tile(range(msmt_per_exp), expts * reps)
-        self["__val_msmts__"] = np.arange(msmt_per_exp)
+        add_axis_meta(self, "msmts", np.arange(msmt_per_exp))
+
 
         # add iq data
         for i, ch in enumerate(self.ro_chs):
@@ -115,7 +152,7 @@ class QickDataDict(DataDict):
 
         # add qick repeat index data
         new_data["reps"] = np.repeat(np.arange(reps), msmt_per_exp * expts)
-        self["__val_reps__"] = np.arange(reps)
+        add_axis_meta(self, "reps", np.arange(reps))
 
         # add qick inner sweep data
         for k, v in flatten_inner.items():
@@ -127,7 +164,7 @@ class QickDataDict(DataDict):
 
         # add soft repeat index data
         new_data["soft_reps"] = np.repeat([soft_rep], msmt_per_exp * expts * reps)
-        self["__val_soft_reps__"] = np.arange(soft_rep + 1)
+        add_axis_meta(self, "soft_reps",  np.arange(soft_rep + 1))
 
         super().add_data(**new_data)
 
@@ -187,6 +224,13 @@ def quick_save(filepath, filename, avg_i, avg_q, buf_i=None, buf_q=None, config=
         dw.add_data(inner_sweeps=inner_sweeps, avg_i=avg_i, avg_q=avg_q, buf_i=buf_i, buf_q=buf_q)
 
 
+def _get_eval_meta(qdd, nema):
+    val = qdd.meta_val(f"val_{nema}")
+    if (type(val) == str) and (val[:6] == "eval__"):
+        return eval(val[6:])
+    else:
+        return val
+
 
 
 class DataFromQDDH5:
@@ -208,8 +252,8 @@ class DataFromQDDH5:
         self.buf_iq = {}
         self.axes = {}
         self.ro_chs = []
-        self.reps = self.datadict.meta_val("val_reps")[-1] + 1
-        self.soft_reps = self.datadict.meta_val("val_soft_reps")[-1] + 1
+        self.reps = _get_eval_meta(self.datadict, "reps")[-1] + 1
+        self.soft_reps = _get_eval_meta(self.datadict, "soft_reps")[-1] + 1
         self.total_reps = self.reps * self.soft_reps
         self.axes_names = []
         self.datashape = []
@@ -248,7 +292,7 @@ class DataFromQDDH5:
         for ax in data["axes"][::-1]: 
             try:  
                 # get values of sweep axes from metadata if saved in metadata
-                ax_val = self.datadict.meta_val(f"val_{ax}")
+                ax_val = _get_eval_meta(self.datadict, ax)
                 ax_dim = len(ax_val)
                 if ax_val == "None": # sweep axis not saved in meta
                     ax_dim = -1
