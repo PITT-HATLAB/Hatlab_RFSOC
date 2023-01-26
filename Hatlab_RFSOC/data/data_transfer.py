@@ -7,13 +7,43 @@ We probably don't need these functions anymore if we run experiments with pyro.
 import subprocess
 from typing import Dict
 import json
+import h5py
+import yaml
 import numpy as np
+from os.path import exists
+import os
 
 HOMEPATH = "/home/xilinx"
 
-def saveData(data:Dict, fileName, filePath):
-    with open(filePath+fileName, 'w') as outfile:
-        json.dump(data, outfile, default=_jsonDefaultRules)
+
+def saveData(data:Dict, fileName, filePath, fileType:str="h5"):
+    try:
+        os.makedirs(filePath)
+    except FileExistsError:
+        pass
+
+    fn_ = fileName
+    ii = 2
+    while True:
+        if exists(filePath+fn_):
+            fn_ = fileName + f"-{ii}"
+            ii += 1
+        else:
+            break
+
+    if fileType in ["json", "JSON"]:
+        with open(filePath + fn_ + ".json", 'w') as outfile:
+            json.dump(data, outfile, default=_jsonDefaultRules)
+    elif fileType in ["h5", "H5", "hdf5", "HDF5"]:
+        with h5py.File(filePath + fn_ + ".h5", "w-") as f:
+            for s, var in data.items():
+                f.create_dataset(s, data=var)
+    elif fileType in ["yaml", "yml", "YAML"]:
+        with open(filePath + fn_ + ".yml", "w-") as file:
+            yaml.dump(data, file)
+    else:
+        raise NotImplementedError(f"Don't know what to do with file type {fileType}, try 'json', 'h5', or 'yml'")
+
 
 def _jsonDefaultRules(obj):
     if type(obj).__module__ == np.__name__:
