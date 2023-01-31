@@ -16,10 +16,14 @@ def to_yaml_friendly(v):
         return vv
     try:
         if len(v) > 0:
+            # convert np.array to list
             try:
                 vv = v.tolist()
             except AttributeError:
                 vv = v
+            # convert each element
+            for i, d in enumerate(vv):
+                vv[i] = to_yaml_friendly(d)
             return vv
     except TypeError:
         vv = float(v)

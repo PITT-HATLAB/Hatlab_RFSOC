@@ -104,7 +104,6 @@ class FlatTopGainSweep(QickSweep):
         super().reset()
 
 
-
 class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
     """
     APAveragerProgram class. "A" and "P" stands for "Automatic" and "Physical". This class automatically declares the
@@ -349,6 +348,17 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
                 self.readout_per_exp = 1
             else:
                 self.readout_per_exp += 1
+    
+    def reset_ts(self):
+        """
+        Reset the soft accumulated dac and adc timestamps.
+        This is usually automatically done in sync_all(). However, when the pulse_length/trigger_time is controlled by 
+        FPGA registers, the soft counted timestamp will not work, and we have to call this manually.
+        :return: 
+        """
+        # Timestamps, for keeping track of pulse and readout end times.
+        self._dac_ts = [0] * len(self._dac_ts)
+        self._adc_ts = [0] * len(self._adc_ts)
 
 
 class NDAveragerProgram(APAveragerProgram):
@@ -525,3 +535,116 @@ class NDAveragerProgram(APAveragerProgram):
                 avg_d[i_ch][ii] = np.sum(d_reps[i_ch][ii::reads_per_rep, :].reshape((self.reps, self.expts, 2)),
                                          axis=0) / (self.reps * ro['length'])
         return avg_d
+
+
+class QubitMsmtMixin:
+    def set_pulse_params_IQ(self: QickProgram, gen_ch:str, skew_phase, IQ_scale, **kwargs):
+        """ set the pulse register for two DAC channels that are going to be sent to a IQ mixer.
+        :param self: qick program for which the pulses will be added
+        :param gen_ch: IQ generator channel name
+        :param skew_phase: pre-tuned skewPhase value for the IQ mixer (deg)
+        :param IQ_scale: pre-tuned IQ scale value for the IQ mixer
+        :param kwargs: kwargs for "set_pulse_params"
+        :return:
+        """
+        ch_I, ch_Q = self.cfg["gen_chs"][gen_ch]["ch"]
+        gain_I = kwargs.pop("gain", None)
+        gain_Q = int(gain_I * IQ_scale)
+        phase_I = kwargs.pop("phase", None)
+        phase_Q = phase_I + skew_phase
+
+        gen_ro_ch = self.cfg["gen_chs"][gen_ch].get("ro_ch")
+        I_regs = self.pulse_param_to_reg(ch_I, gen_ro_ch, phase=phase_I, gain=gain_I, **kwargs)
+        Q_regs = self.pulse_param_to_reg(ch_Q, gen_ro_ch, phase=phase_Q, gain=gain_Q, **kwargs)
+
+        self.set_pulse_registers(ch=ch_I, **I_regs)
+        self.set_pulse_registers(ch=ch_Q, **Q_regs)
+
+    def set_pulse_params_auto_gen_type(self:QickProgram, gen_ch:str, **pulse_args):
+        """
+        set pulse params based on the generator type. feed "skew_phase" and "IQ_scale" for IQ channels; auto add mask
+        for muxed channels
+        :param gen_ch: generator channel name
+        :param pulse_args: pulse params
+        :return:
+        """
+        gen_params = self.cfg["gen_chs"][gen_ch]
+        # set readout pulse registers
+        if "skew_phase" in gen_params: # IQ channel
+            pulse_args["skew_phase"] = gen_params["skew_phase"]
+            pulse_args["IQ_scale"] = gen_params["IQ_scale"]
+            self.set_pulse_params_IQ(gen_ch, **pulse_args)
+        else:
+            if ("mask" in self._gen_mgrs[gen_params["ch"]].PARAMS_REQUIRED["const"]) and ("mask" not in gen_params):
+                pulse_args["mask"] = [0, 1, 2, 3]
+            self.set_pulse_params(gen_ch, **pulse_args)
+
+
+    def add_prepare_msmt(self:QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
+                         prepare_q_gain: int = None):
+        """
+        add a state preparation measurement to the qick asm program.
+
+        :param self:
+        :param q_drive_ch: Qubit drive channel name
+        :param q_pulse_cfg: Qubit drive pulse_cfg
+        :param res_ch: Resonator drive channel name
+        :param syncdelay: time to wait after msmt, in us
+        :param prepare_q_gain: q drive gain for the prepare pulse
+        :return:
+        """
+        if prepare_q_gain is None:
+            prepare_q_gain = q_pulse_cfg["pi2_gain"]
+
+        # play ~pi/n pulse to ensure ~50% selection rate.
+        self.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
+                              phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
+        self.pulse(ch=self.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
+
+        self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
+
+        # add measurement
+        self.measure(pulse_ch=self.cfg["gen_chs"][res_ch]["ch"],
+                     adcs=self.ro_chs,
+                     pins=[0],
+                     adc_trig_offset=self.cfg["adc_trig_offset"],
+                     wait=True,
+                     syncdelay=self.us2cycles(syncdelay))
+
+
+    def add_tomo(self:QickProgram, core:Callable, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
+                 ro_ch=None, phase_off=0):
+        """
+        add qubit tomography msmts after the core experiment
+
+        :param core: core part of the experiment
+        :param q_drive_ch: Qubit drive channel name
+        :param q_pulse_cfg: Qubit drive pulse_cfg
+        :param res_ch: Resonator drive channel name
+        :param syncdelay: time to wait after msmt, in us
+        :param ro_ch: readout channel. By default, all readout channels will be trigger.
+        :param phase_off: phase offset for the tomography, in deg
+        :return:
+        """
+        pi2_gain = q_pulse_cfg["pi2_gain"]
+        if ro_ch is None:
+            ro_ch = self.ro_chs
+        tomo_phases = phase_off + np.array([-90, 0, 0])
+        for phase_t, gain_t in zip(tomo_phases, [pi2_gain, pi2_gain, 0]):
+            # perform core experiment
+            core()
+
+            # play tomo pulse
+            self.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
+                                  phase=phase_t, freq=q_pulse_cfg["ge_freq"], gain=gain_t)
+
+            self.pulse(ch=self.cfg["gen_chs"][q_drive_ch]["ch"])
+            self.sync_all(0.05)  # align channels and wait
+
+            # add measurement
+            self.measure(pulse_ch=self.cfg["gen_chs"][res_ch]["ch"],
+                         adcs=ro_ch,
+                         pins=[0],
+                         adc_trig_offset=self.cfg["adc_trig_offset"],
+                         wait=True,
+                         syncdelay=self.us2cycles(syncdelay))
