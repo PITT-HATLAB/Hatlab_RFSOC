@@ -1,0 +1,146 @@
+from Hatlab_RFSOC.proxy import getSocProxy
+from qick import *
+import matplotlib.pyplot as plt
+import numpy as np
+from tqdm import tqdm
+soc, soccfg = getSocProxy("myqick216-01")
+
+class LoopbackProgram(AveragerProgram):
+    def initialize(self):
+        cfg = self.cfg
+        res_ch = cfg["res_ch"]
+
+        # set the nyquist zone
+        self.declare_gen(ch=cfg["res_ch"], nqz=2)
+
+        # configure the readout lengths and downconversion frequencies (ensuring it is an available DAC frequency)
+        for ch in cfg["ro_chs"]:
+            if self.soccfg['readouts'][ch]['tproc_ctrl'] is None:
+                self.declare_readout(ch=ch, length=cfg["readout_length"],
+                                     freq=cfg["readout_freq"], gen_ch=cfg["res_ch"])
+            else:
+                self.declare_readout(ch=ch, length=cfg["readout_length"])
+                freq_ro = self.freq2reg_adc(cfg["readout_freq"], ro_ch=ch, gen_ch=cfg['res_ch'])
+                self.set_readout_registers(ch=ch, freq=freq_ro, length=3,
+                                           mode='oneshot', outsel='product', phrst=0)
+
+
+        # convert frequency to DAC frequency (ensuring it is an available ADC frequency)
+        freq = self.freq2reg(cfg["pulse_freq"], gen_ch=res_ch, ro_ch=cfg["ro_chs"][0])
+        phase = self.deg2reg(cfg["res_phase"], gen_ch=res_ch)
+        gain = cfg["pulse_gain"]
+        style = self.cfg["pulse_style"]
+
+        self.set_pulse_registers(ch=res_ch, style=style, freq=freq, phase=phase, gain=gain, length=cfg["length"], phrst=0)
+
+        self.synci(200)  # give processor some time to configure pulses
+
+    def body(self):
+        cfg = self.cfg
+
+        self.reset_phase(self.cfg["res_ch"], self.cfg["ro_chs"])
+
+        # --------------- equivalent to ----------------
+        # res_ch = cfg["res_ch"]
+        # freq_ro = self.freq2reg_adc(cfg["readout_freq"], ro_ch=cfg["ro_chs"][0], gen_ch=cfg['res_ch'])
+        # freq = self.freq2reg(cfg["pulse_freq"], gen_ch=res_ch, ro_ch=cfg["ro_chs"][0])
+        # phase = self.deg2reg(cfg["res_phase"], gen_ch=res_ch)
+        # gain = cfg["pulse_gain"]
+        # style = self.cfg["pulse_style"]
+        # self.set_pulse_registers(ch=res_ch, style=style, freq=0, phase=phase, gain=0, length=3, phrst=1)
+        # self.pulse(ch=self.cfg["res_ch"], t=0)
+        # self.set_pulse_registers(ch=res_ch, style=style, freq=freq, phase=phase, gain=gain, length=cfg["length"], phrst=0)
+        #
+        # self.set_readout_registers(ch=cfg["ro_chs"][0], freq=0, length=3, phrst=1)
+        # self.readout(ch=self.cfg["ro_chs"][0], t=0)
+        # self.set_readout_registers(ch=cfg["ro_chs"][0], freq=freq_ro, length=3,  mode='oneshot', outsel='product', phrst=0)
+
+
+
+        self.readout(ch=self.cfg["ro_chs"][0], t=0)
+
+        self.trigger(self.ro_chs, pins=[0], adc_trig_offset=self.cfg["adc_trig_offset"], t=0)
+        # self.pulse(ch=self.cfg["res_ch"], t=0)
+        self.wait_all()
+        self.sync_all(self.us2cycles(self.cfg["relax_delay"]))
+
+
+
+
+
+config = {"res_ch": 0,  # --Fixed
+          "ro_chs": [0],  # --Fixed
+          "reps": 1,  # --Fixed
+          "relax_delay": 1.0,  # --us
+          "res_phase": 0,  # --degrees
+          "pulse_style": "const",  # --Fixed
+
+          "length": 1000,  # [Clock ticks]
+          # Try varying length from 10-100 clock ticks
+
+          "readout_length": 1000,  # [Clock ticks]
+          # Try varying readout_length from 50-1000 clock ticks
+
+          "pulse_gain": 30000,  # [DAC units]
+          # Try varying pulse_gain from 500 to 30000 DAC units
+
+          # "pulse_freq": 2457.60 * 3 +10 ,  # [MHz]
+          # "readout_freq": 10,  # [MHz]
+
+          "pulse_freq": 2457.6 * 3 + 17.7424,  # [MHz]
+          "readout_freq":  17.7424,  # [MHz]
+
+          "adc_trig_offset": 120,  # [Clock ticks]
+          # Try varying adc_trig_offset from 100 to 220 clock ticks
+
+          "soft_avgs": 5000
+          # Try varying soft_avgs from 1 to 200 averages
+
+          }
+
+###################
+# Try it yourself !
+###################
+if __name__ == "__main__":
+    prog = LoopbackProgram(soccfg, config)
+
+
+    n_rounds = 1
+    iq_array = np.zeros((n_rounds, 2, config["readout_length"]))
+    for i in tqdm(range(n_rounds)):
+        iq_list = prog.acquire_decimated(soc, load_pulses=True, progress=True, debug=False)
+        iq_array[i] = iq_list[0]
+
+    t_race = soc.cycles2us(np.arange(0, config["readout_length"]), ro_ch=config["ro_chs"][0])
+    I_trace = np.average(iq_array, axis=0)[0]
+    Q_trace = np.average(iq_array, axis=0)[1]
+    # Plot results of each run
+    plt.figure(1)
+    for ii, iq in enumerate(iq_array):
+        plt.plot(iq[0], label="I value")
+        plt.plot(iq[1], label="Q value")
+        # plt.plot(np.abs(iq[0]+1j*iq[1]), label="mag")
+    plt.ylabel("a.u.")
+    plt.xlabel("Clock ticks")
+    plt.legend()
+
+    # plt.figure()
+    # plt.plot(t_race, I_trace)
+    # plt.plot(t_race, Q_trace)
+    # plt.plot(t_race, np.sqrt(I_trace**2+Q_trace**2))
+
+    from Hatlab_DataProcessing.analyzer.fft import fft
+    fourier = fft(t_race, I_trace)
+
+
+    # convolve -----------------
+    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    ax[0].plot(I_trace, label="I_trace")
+    for N_sample in [12, 17, 19]:
+        print(2457.6/4/36.2)
+        # N_sample = 17*3
+        conv = np.convolve(I_trace, np.ones(N_sample))
+        ax[1].plot(conv, label = f"I_trace conv, window_size = {N_sample}")
+        ax[0].legend()
+        ax[1].legend()
+

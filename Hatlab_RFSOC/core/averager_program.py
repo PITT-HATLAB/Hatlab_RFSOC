@@ -581,7 +581,7 @@ class QubitMsmtMixin:
 
 
     def add_prepare_msmt(self:QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
-                         prepare_q_gain: int = None):
+                         prepare_q_gain: int = None, adcs=None):
         """
         add a state preparation measurement to the qick asm program.
 
@@ -605,7 +605,7 @@ class QubitMsmtMixin:
 
         # add measurement
         self.measure(pulse_ch=self.cfg["gen_chs"][res_ch]["ch"],
-                     adcs=self.ro_chs,
+                     adcs=adcs if adcs is not None else self.ro_chs,
                      pins=[0],
                      adc_trig_offset=self.cfg["adc_trig_offset"],
                      wait=True,

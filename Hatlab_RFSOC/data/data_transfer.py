@@ -25,7 +25,7 @@ def saveData(data:Dict, fileName, filePath, fileType:str="h5"):
     fn_ = fileName
     ii = 2
     while True:
-        if exists(filePath+fn_):
+        if exists(filePath+fn_+f".{fileType}"):
             fn_ = fileName + f"-{ii}"
             ii += 1
         else:
@@ -43,6 +43,24 @@ def saveData(data:Dict, fileName, filePath, fileType:str="h5"):
             yaml.dump(data, file)
     else:
         raise NotImplementedError(f"Don't know what to do with file type {fileType}, try 'json', 'h5', or 'yml'")
+
+
+def loadData(fileName:str, filePath:str):
+    data = {}
+    fileType = fileName.split(".")[-1]
+    if fileType in ["json", "JSON"]:
+        with open(filePath + fileName, 'r') as datafile:
+            data = json.load(datafile, default=_jsonDefaultRules)
+    elif fileType in ["h5", "H5", "hdf5", "HDF5"]:
+        with h5py.File(filePath + fileName, "r") as f:
+            for s in f:
+                data[s] = f[s][()]
+    elif fileType in ["yaml", "yml", "YAML"]:
+        with open(filePath + fileName, "r") as datafile:
+            data = yaml.load(datafile)
+    else:
+        raise NotImplementedError(f"Don't know what to do with file type {fileType}, try 'json', 'h5', or 'yml'")
+    return data
 
 
 def _jsonDefaultRules(obj):
