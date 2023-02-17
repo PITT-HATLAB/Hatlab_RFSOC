@@ -12,11 +12,12 @@ import yaml
 import numpy as np
 from os.path import exists
 import os
+from Hatlab_RFSOC.helpers.yaml_editor import to_yaml_friendly
 
 HOMEPATH = "/home/xilinx"
 
 
-def saveData(data:Dict, fileName, filePath, fileType:str="h5"):
+def saveData(data:Dict, fileName, filePath, fileType:str="h5", cfg:Dict=None):
     try:
         os.makedirs(filePath)
     except FileExistsError:
@@ -44,10 +45,17 @@ def saveData(data:Dict, fileName, filePath, fileType:str="h5"):
     else:
         raise NotImplementedError(f"Don't know what to do with file type {fileType}, try 'json', 'h5', or 'yml'")
 
+    if cfg is not None:
+        save_config(f"{fn_}_cfg.yaml", filePath, to_yaml_friendly(cfg))
 
-def loadData(fileName:str, filePath:str):
+    return fn_
+
+
+def loadData(fileName:str, filePath:str, loadCfg=True):
     data = {}
     fileType = fileName.split(".")[-1]
+    bare_name = ".".join(fileName.split(".")[:-1])
+    cfg_name = bare_name + "_cfg.yaml"
     if fileType in ["json", "JSON"]:
         with open(filePath + fileName, 'r') as datafile:
             data = json.load(datafile, default=_jsonDefaultRules)
@@ -60,7 +68,27 @@ def loadData(fileName:str, filePath:str):
             data = yaml.load(datafile)
     else:
         raise NotImplementedError(f"Don't know what to do with file type {fileType}, try 'json', 'h5', or 'yml'")
+
+    if loadCfg:
+        try:
+            cfg = load_config(cfg_name, filePath)
+            return data, cfg
+        except FileNotFoundError as e:
+            print(e)
+            return data
+
     return data
+
+
+def save_config(fileName, filePath, cfg: Dict):
+    cfg = to_yaml_friendly(cfg)
+    with open(filePath+ fileName, 'w') as file:
+        yaml.dump(cfg, file)
+
+def load_config(fileName, filePath):
+    with open(filePath + fileName, 'r') as file:
+        cfg = yaml.safe_load(file)
+    return cfg
 
 
 def _jsonDefaultRules(obj):
