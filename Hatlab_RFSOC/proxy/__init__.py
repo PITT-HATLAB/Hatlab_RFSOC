@@ -2,17 +2,19 @@ import Pyro4
 from qick import QickConfig
 import socket
 
-PITTIP = "136.142"  # our lab PC usually has two ethernet cards, the one that connects to the university network usually starts with these 6 digits
-
+LocalIP_Identifier = "192.168" #Assume the local network IP always starts with 192.168
 
 def getLocalIPv4():
-    # get IPv4 addresses of the local PC, and find the address of the ethernet card that is on lab local network
-    # (the one that doesn't start with PITTIP).
+    """
+    get IPv4 addresses of the local PC, and find the address of the ethernet card that is connected
+    to lab local network.
+    Assume the local network IP always starts with LocalIP_Identifier
+    """
     addrInfo = socket.getaddrinfo(socket.gethostname(), None, family=socket.AF_INET)
     ipv4Addres = [i[4][0] for i in addrInfo]
     localIPv4 = None
     for ip in ipv4Addres:
-        if PITTIP not in ip:
+        if LocalIP_Identifier in ip:
             if localIPv4 is None:
                 localIPv4 = ip
             else:
@@ -36,5 +38,5 @@ def getSocProxy(server_name: str, ns_host: str = None):
 
 
 if __name__ == "__main__":
-    soc, soccfg = getSocProxy("myqick")
+    soc, soccfg = getSocProxy("myqick111_01")
     print(soccfg)
