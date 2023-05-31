@@ -23,7 +23,14 @@ def getLocalIPv4():
     return localIPv4
 
 
-def getSocProxy(server_name: str, ns_host: str = None):
+def getSocProxy(proxy_name: str, ns_host: str = None):
+    """
+    get soc proxy from pyro server
+    :param proxy_name: proxy name set in the server
+    :param ns_host: nameserver host IP. If None, will use the IP address of  the
+    local network of the current PC.
+    :return:
+    """
     if ns_host is None:
         ns_host = getLocalIPv4()  # socket.gethostname()
 
@@ -32,11 +39,12 @@ def getSocProxy(server_name: str, ns_host: str = None):
     ns_port = 8888
     ns = Pyro4.locateNS(host=ns_host, port=ns_port)
 
-    soc = Pyro4.Proxy(ns.lookup(server_name))
+    soc = Pyro4.Proxy(ns.lookup(proxy_name))
     soccfg = QickConfig(soc.get_cfg())
     return soc, soccfg
 
 
 if __name__ == "__main__":
-    soc, soccfg = getSocProxy("myqick111_01")
+    # For test, change proxy_name name to the name you set on the Pyro server (running on the board)
+    soc, soccfg = getSocProxy(proxy_name="myqick111_01")
     print(soccfg)
