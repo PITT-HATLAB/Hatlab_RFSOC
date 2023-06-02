@@ -8,10 +8,9 @@ from Hatlab_RFSOC.core.averager_program import NDAveragerProgram, QickSweep, Qub
 class CavityResponseProgram(QubitMsmtMixin, NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
-        # declare res generator and readout channels
+        # declare res generator and readout channels have been done automatically in
+        # the init of parent classes
         self.res_ch = self.cfg["gen_chs"]["res_drive"]["ch"]
-        for ro_cfg in cfg["ro_chs"].values():
-            self.declare_readout(**ro_cfg)
 
         # set readout pulse registers
         self.set_pulse_params_auto_gen_type("res_drive", **cfg["res_pulse_config"])
@@ -29,7 +28,6 @@ class CavityResponseProgram(QubitMsmtMixin, NDAveragerProgram):
 class PrepareQubitCavityResponseProgram(QubitMsmtMixin, NDAveragerProgram):
     def initialize(self):
         cfg = self.cfg
-        # declare res generator and readout channels
         self.res_ch = self.cfg["gen_chs"]["res_drive"]["ch"]
         self.qubit_ch = self.cfg["gen_chs"]["q_drive"]["ch"]
 
