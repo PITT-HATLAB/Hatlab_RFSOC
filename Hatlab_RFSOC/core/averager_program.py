@@ -173,7 +173,7 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
                 self.declare_readout(ch=ch, length=kws["length"])
                 freq_ro = self.freq2reg_adc(kws["freq"], ro_ch=ch, gen_ch=kws["gen_ch"])
                 self.set_readout_registers(ch=ch, freq=freq_ro, length=kws["length"], # The length here actually doesn't matter
-                                           mode='oneshot', outsel='product', phrst=kws["phrst"])
+                                           mode='oneshot', outsel='product', phrst=kws.get("phrst",0))
 
 
     def get_gen_reg(self, gen_ch: Union[str, int], name: str) -> QickRegister:
