@@ -8,6 +8,7 @@ setup(
       python_requires='>=3.7, <4',
 
       install_requires=[
-            "Pyro4"
-      ],
+            "Pyro4", 
+            "qick"
+      ]
 )
