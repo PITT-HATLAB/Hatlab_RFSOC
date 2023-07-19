@@ -1,1 +1,1 @@
-from .datadict import QickDataDict, DataFromQDDH5, quick_save
+from .datadict import QickDataDict, DataFromQDDH5, quick_save, get_config_info

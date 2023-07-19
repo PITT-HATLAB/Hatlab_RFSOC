@@ -2,6 +2,7 @@ from typing import List, Dict, Union
 import tempfile
 import numpy as np
 import h5py
+import yaml
 
 from plottr.data.datadict import DataDict, DataDictBase
 from plottr.data.datadict_storage import set_attr as dd_set_attr
@@ -232,6 +233,18 @@ def _get_eval_meta(qdd, nema):
         return val
 
 
+def get_config_info(datapath: str):
+    """
+    get the config and info dict from the data path
+    :param datapath: 
+    :return: 
+    """
+    filename = datapath.split("\\")[-1][:-5]
+    filepath = "\\".join(datapath.split("\\")[:-1]) + "\\"
+    config = yaml.safe_load(open(datapath[:-5] + "_cfg.yaml"))["config"]
+    info = yaml.safe_load(open(datapath[:-5] + "_cfg.yaml"))["info"]
+
+    return config, info 
 
 class DataFromQDDH5:
     def __init__(self, ddh5_path, merge_reps=True, progress=False, fast_load=True):
