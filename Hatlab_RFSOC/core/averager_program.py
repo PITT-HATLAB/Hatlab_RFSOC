@@ -587,7 +587,8 @@ class QubitMsmtMixin:
 
         :param self:
         :param q_drive_ch: Qubit drive channel name
-        :param q_pulse_cfg: Qubit drive pulse_cfg
+        :param q_pulse_cfg: Qubit drive pulse_cfg, should be the "q_pulse_cfg" in the yml file, which contains the
+            "ge_freq".
         :param res_ch: Resonator drive channel name
         :param syncdelay: time to wait after msmt, in us
         :param prepare_q_gain: q drive gain for the prepare pulse
@@ -595,10 +596,30 @@ class QubitMsmtMixin:
         """
         if prepare_q_gain is None:
             prepare_q_gain = q_pulse_cfg["pi2_gain"]
-
-        # play ~pi/n pulse to ensure ~50% selection rate.
-        self.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
+            
+        q_pulse_cfg_ = dict(style="arb", waveform=q_pulse_cfg["waveform"],
                               phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
+
+        self.add_prepare_msmt_general(q_drive_ch, q_pulse_cfg_, res_ch, syncdelay, adcs)
+
+
+
+    def add_prepare_msmt_general(self:QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
+                         adcs=None):
+        """
+        add a state preparation measurement to the qick asm program.
+
+        :param self:
+        :param q_drive_ch: Qubit drive channel name
+        :param q_pulse_cfg: Qubit drive pulse_cfg
+        :param res_ch: Resonator drive channel name
+        :param syncdelay: time to wait after msmt, in us
+        :param prepare_q_gain: q drive gain for the prepare pulse
+        :return:
+        """
+        
+        # play ~pi/n pulse to ensure ~50% selection rate.
+        self.set_pulse_params(q_drive_ch, **q_pulse_cfg)
         self.pulse(ch=self.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
 
         self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
@@ -610,6 +631,8 @@ class QubitMsmtMixin:
                      adc_trig_offset=self.cfg["adc_trig_offset"],
                      wait=True,
                      syncdelay=self.us2cycles(syncdelay))
+
+
 
 
     def add_tomo(self:QickProgram, core:Callable, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
