@@ -1,3 +1,4 @@
+import warnings
 from typing import List, Dict, Union
 import tempfile
 import numpy as np
@@ -32,7 +33,12 @@ def add_axis_meta(dd:Union[DataDictBase, Dict], ax_name: str, ax_value):
         # check if the value can be represented as a np.arange expression
         steps = ax_value[1:] - ax_value[:-1]
         if len(set(steps)) > 1:
-            raise NotImplementedError(f"can't write {ax_name} with value {ax_value} as a np.arrange expression")
+            if (np.max(steps) - np.min(steps))/np.mean(steps) < 1e-8:
+                warnings.warn(f"there seems to be a non-unique step in the sweep array, but the difference seems to be"
+                              f"small. The averaged step value {np.average(steps)} is used for variable {ax_name}.")
+                step = np.average(steps)
+            else:
+                raise NotImplementedError(f"can't write {ax_name} with value {ax_value} as a np.arrange expression")
         else:
             step = steps[0]
         newval = f"eval__np.arange({ax_value[0]}, {ax_value[-1] + step }, {step})" # we will decode this in data loading
