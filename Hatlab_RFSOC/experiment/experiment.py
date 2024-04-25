@@ -73,16 +73,18 @@ class Experiment():
         else:
             ddw = DummyWriter()
 
+        self.prog = self.program(self.soccfg, self.cfg)
+        x_pts, avgi, avgq = self.prog.acquire(self.soc, load_pulses=True, progress=inner_progress, debug=False,
+                                              readouts_per_experiment=readouts_per_experiment,
+                                              save_experiments=save_experiments)
+
         ## run program (and save data)
         if save_data:
             if ddw.inserted_rows == 0:
                 ddw.__enter__()
 
             ddw.save_config(to_yaml_friendly({"config":self.cfg, "info": self.info}))
-            self.prog = self.program(self.soccfg, self.cfg)
-            x_pts, avgi, avgq = self.prog.acquire(self.soc, load_pulses=True, progress=inner_progress, debug=False,
-                                                  readouts_per_experiment=readouts_per_experiment,
-                                                  save_experiments=save_experiments)
+
             if save_buf:
                 ddw.add_data(avg_i=avgi, avg_q=avgq, buf_i=self.prog.di_buf_p, buf_q=self.prog.dq_buf_p,
                              inner_sweeps=inner_sweeps, soft_rep=soft_rep, **outer_vals)
