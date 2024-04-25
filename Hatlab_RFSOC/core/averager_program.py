@@ -537,6 +537,80 @@ class NDAveragerProgram(APAveragerProgram):
         return avg_d
 
 
+class QCAveragerProgram(NDAveragerProgram):
+    """
+    QCAveragerProgram class, for quantum circuit level experiments in qick.
+
+    :param cfg: Configuration dictionary
+    :type cfg: dict
+    """
+    def __init__(self, soccfg, cfg, qc_cfg):
+        """
+        Constructor for the QCAveragerProgram. Make the ND sweep asm commands.
+        """
+        self.qc_cfg = qc_cfg
+        super().__init__(soccfg, cfg)
+
+    def _add_gate(self, pulse_name: str = None, p_cfg: dict = None, phase_offset: float = 0):
+        def _get_ch(ch: int|str):
+            if type(ch) is str:
+                ch = self.cfg["gen_chs"][ch]["ch"]
+            return ch
+
+        if pulse_name in self.qc_cfg['pulse_config'].keys():
+            try:
+                p_cfg = self.qc_cfg['pulse_config'][pulse_name]
+            except:
+                raise ValueError(f'{pulse_name} is unavailable in config')
+        elif p_cfg is not None:
+            pass
+        else:
+            raise ValueError('No available pulse config')
+
+        try:
+            qubit = p_cfg.pop('qubit')
+        except:
+            pass
+        
+        ch = _get_ch(p_cfg["gen_ch"])
+
+        if p_cfg['style'] == "arb" or p_cfg['style'] == 'flat_top':
+            if p_cfg["waveform"] not in self._gen_mgrs[ch].pulses.keys():
+                self.add_waveform_from_cfg(p_cfg["gen_ch"], p_cfg["waveform"])
+            self.set_pulse_params(**p_cfg)
+        elif p_cfg['style'] == 'const':
+            self.set_pulse_params(**p_cfg)
+        else:
+            raise ValueError("Not supported pulse style. Choose from 'arb', 'flat_top' or 'const'.")
+
+        self.pulse(ch)
+
+    def add_x(self, qubit: str, **kwargs):
+        self._add_gate(pulse_name=f'x_{qubit}', **kwargs)
+        pass
+
+    def add_x2(self, qubit: str, **kwargs):
+        self._add_gate(pulse_name=f'x2_{qubit}', **kwargs)
+        pass
+
+    def add_y(self, qubit: str, **kwargs):
+        self._add_gate(pulse_name=f'y_{qubit}', **kwargs)
+        pass
+
+    def add_y2(self, qubit: str, **kwargs):
+        self._add_gate(pulse_name=f'y2_{qubit}', **kwargs)
+        pass
+
+    def add_zgate(self, qubit: str, **kwargs):
+        pass
+
+    def add_iswap(self: QickProgram, q_drive_ch: str, pulse_cfg: dict=None):
+        pass
+
+    def add_rtiswap(self: QickProgram, q_drive_ch: str, pulse_cfg: dict=None):
+        pass
+
+
 class QubitMsmtMixin:
     def set_pulse_params_IQ(self: QickProgram, gen_ch:str, skew_phase, IQ_scale, **kwargs):
         """ set the pulse register for two DAC channels that are going to be sent to a IQ mixer.
