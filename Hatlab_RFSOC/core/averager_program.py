@@ -166,7 +166,7 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
         ro_chs = self.cfg.get("ro_chs", {})
         for ro_ch, kws in ro_chs.items():
             # self.declare_readout(**kws)
-            ch = kws["ch"]
+            ch = int(kws["ch"])
             if self.soccfg['readouts'][ch].get('tproc_ctrl') is None:
                 self.declare_readout(**kws)
             else:
@@ -595,7 +595,7 @@ class QubitMsmtMixin:
         :return:
         """
         if prepare_q_gain is None:
-            prepare_q_gain = q_pulse_cfg["pi2_gain"]
+            prepare_q_gain = int(q_pulse_cfg["pi2_gain"] * 0.75)
             
         q_pulse_cfg_ = dict(style="arb", waveform=q_pulse_cfg["waveform"],
                               phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
@@ -632,7 +632,55 @@ class QubitMsmtMixin:
                      wait=True,
                      syncdelay=self.us2cycles(syncdelay))
 
+    def add_prepare_msmt_with_amps(self: QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_chs: list[int], syncdelay: float,
+                         prepare_q_gain: int = None, adcs=None):
+        """
+        add a state preparation measurement to the qick asm program.
 
+        :param self:
+        :param q_drive_ch: Qubit drive channel name
+        :param q_pulse_cfg: Qubit drive pulse_cfg, should be the "q_pulse_cfg" in the yml file, which contains the
+            "ge_freq".
+        :param res_chs: Resonator drive channels in a list. This supports turning on all the amp channels as well
+        :param syncdelay: time to wait after msmt, in us
+        :param prepare_q_gain: q drive gain for the prepare pulse
+        :return:
+        """
+        if prepare_q_gain is None:
+            prepare_q_gain = q_pulse_cfg["pi2_gain"]
+
+        q_pulse_cfg_ = dict(style="arb", waveform=q_pulse_cfg["waveform"],
+                            phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
+
+        self.add_prepare_msmt_general_with_amps(q_drive_ch, q_pulse_cfg_, res_chs, syncdelay, adcs)
+
+    def add_prepare_msmt_general_with_amps(self: QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_chs: list[int], syncdelay: float,
+                                 adcs=None):
+        """
+        add a state preparation measurement to the qick asm program.
+
+        :param self:
+        :param q_drive_ch: Qubit drive channel name
+        :param q_pulse_cfg: Qubit drive pulse_cfg
+        :param res_chs: Resonator drive channels dictionary
+        :param syncdelay: time to wait after msmt, in us
+        :param prepare_q_gain: q drive gain for the prepare pulse
+        :return:
+        """
+
+        # play ~pi/n pulse to ensure ~50% selection rate.
+        self.set_pulse_params(q_drive_ch, **q_pulse_cfg)
+        self.pulse(ch=self.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
+
+        self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
+
+        # add measurement
+        self.measure(pulse_ch=res_chs,
+                     adcs=adcs if adcs is not None else self.ro_chs,
+                     pins=[0],
+                     adc_trig_offset=self.cfg["adc_trig_offset"],
+                     wait=True,
+                     syncdelay=self.us2cycles(syncdelay))
 
 
     def add_tomo(self:QickProgram, core:Callable, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
