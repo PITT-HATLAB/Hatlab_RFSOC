@@ -62,12 +62,17 @@ def add_tanh(prog: QickProgram, gen_ch, name, length:float, ramp_width:float, cu
     samps_per_clk = soc_gencfg['samps_per_clk']
     fclk = soc_gencfg['f_fabric']
 
-    length_cyc = prog.us2cycles(length, gen_ch=gen_ch)
+    # length_cyc = prog.us2cycles(length, gen_ch=gen_ch)
+    length_cyc = length * fclk
     length_reg = length_cyc * samps_per_clk
     # ramp_reg = np.int64(np.round(ramp_width*fclk*samps_per_clk))
     ramp_reg = ramp_width * fclk * samps_per_clk
 
-    prog.add_pulse(gen_ch, name, idata=tanh_box(length_reg, ramp_reg, cut_offset, maxv=maxv))
+    wf = tanh_box(length_reg, ramp_reg, cut_offset, maxv=maxv)
+    zero_padding = np.zeros((16-len(wf))%16)
+    wf_padded = np.concatenate((wf, zero_padding))
+
+    prog.add_pulse(gen_ch, name, idata=wf_padded)
 
 
 
@@ -96,11 +101,16 @@ def add_gaussian(prog: QickProgram, gen_ch:str, name, sigma:float, length:float,
     samps_per_clk = soc_gencfg['samps_per_clk']
     fclk = soc_gencfg['f_fabric']
 
-    length_cyc = prog.us2cycles(length, gen_ch=gen_ch)
+    # length_cyc = prog.us2cycles(length, gen_ch=gen_ch)
+    length_cyc = length * fclk
     length_reg = length_cyc * samps_per_clk
     sigma_reg = sigma * fclk * samps_per_clk
 
-    prog.add_pulse(gen_ch, name, idata=gaussian(sigma_reg, length_reg, maxv=maxv))
+    wf = gaussian(sigma_reg, length_reg, maxv=maxv)
+    zero_padding = np.zeros((16-len(wf))%16)
+    wf_padded = np.concatenate((wf, zero_padding))
+
+    prog.add_pulse(gen_ch, name, idata=wf_padded)
 
 
 
