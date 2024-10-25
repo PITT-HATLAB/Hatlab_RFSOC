@@ -93,6 +93,8 @@ class Experiment():
                 ddw.add_data(avg_i=avgi, avg_q=avgq, inner_sweeps=inner_sweeps, soft_rep=soft_rep, **outer_vals)
                 return x_pts, avgi, avgq
 
+        return x_pts, avgi, avgq, self.prog.di_buf_p, self.prog.dq_buf_p
+
     def change_data_file(self, data_folder_name: str = None, data_file_name: str = None):
         """
         change target file for data saving.
