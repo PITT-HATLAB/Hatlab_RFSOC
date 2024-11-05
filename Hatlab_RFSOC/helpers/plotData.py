@@ -90,6 +90,16 @@ def plotIQpcolormesh(xdata, ydata, idata, qdata, title=None):
 
 
 def plotWaveform(prog, ch: int, waveform: str, phy_unit=True, polar=False, **kwargs):
+    """
+    plot the waveform stored in a dac channel
+    :param prog: qickprogram
+    :param ch: the waveform channe;
+    :param waveform: the name of the waveform
+    :param phy_unit: time is in us if True, clock cycle if False
+    :param polar: plot iq data in a polar plot
+    :param kwargs: kwargs for plt.figure()
+    :return: time data and waveform data
+    """
     pulse_data = prog.envelopes[ch]["envs"][waveform]['data']
     f_dds = prog.soccfg['gens'][ch]['fs']
     xdata = np.arange(len(pulse_data)) / f_dds if phy_unit else np.arange(len(pulse_data))
