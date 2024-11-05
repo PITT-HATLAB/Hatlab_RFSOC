@@ -4,10 +4,12 @@ import warnings
 from tqdm import tqdm
 import numpy as np
 
-from qick.qick_asm import QickProgram, FullSpeedGenManager, QickRegister, QickRegisterManagerMixin
+from qick.qick_asm import AcquireMixin
+from qick.asm_v1 import QickProgram, FullSpeedGenManager, QickRegister, QickRegisterManagerMixin
 from qick.averager_program import AbsQickSweep, QickSweep, NDAveragerProgram
 
-from .pulses import add_gaussian, add_tanh
+from .pulses import add_gaussian, add_tanh, add_pulse_concatenate, add_arbitrary
+from C004_Chirp_modulation import ChirpModulationMixin as CM
 
 RegisterTypes = Literal["freq", "time", "phase", "adc_freq"]
 
@@ -104,7 +106,7 @@ class FlatTopGainSweep(QickSweep):
         super().reset()
 
 
-class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
+class APAveragerProgram(QickRegisterManagerMixin, AcquireMixin, QickProgram):
     """
     APAveragerProgram class. "A" and "P" stands for "Automatic" and "Physical". This class automatically declares the
     generator and readout channels using the parameters provided in cfg["gen_chs"] and cfg["ro_chs"], and contains
@@ -121,6 +123,8 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
         The format should be: {"waveform_name": {**kwargs_of_add_waveform}}
     """
 
+    COUNTER_ADDR = 1
+
     def __init__(self, soccfg, cfg):
         """
         Initialize the QickProgram and automatically declares all generator and readout channels in cfg["gen_chs"] and
@@ -129,14 +133,16 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
         super().__init__(soccfg)
         self.cfg = cfg
         self.reps = cfg["reps"]
+        self.soft_avgs = 1
         if "soft_avgs" in cfg:
-            self.rounds = cfg['soft_avgs']
+            self.soft_avgs = cfg['soft_avgs']
         if "rounds" in cfg:
             self.rounds = cfg['rounds']
         self.expts = None  # abstract variable for total number of experiments in each repetition.
         self.readout_per_exp = None  # software counter for number of readouts per experiment.
         self.declare_all_gens()
         self.declare_all_readouts()
+
 
     def declare_all_gens(self):
         """
@@ -286,6 +292,8 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
             add_gaussian(self, gen_ch, name, **kwargs)
         elif shape == "tanh_box":
             add_tanh(self, gen_ch, name, **kwargs)
+        elif shape == "from_file":
+            add_arbitrary(self, gen_ch, name, **kwargs)
         else:
             raise NameError(f"unsupported pulse shape {shape}")
 
@@ -310,7 +318,11 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
         """
         Copied from qick.AveragerProgram
         """
-        buf = super().acquire_decimated(soc, reads_per_rep=readouts_per_experiment, load_pulses=load_pulses, start_src=start_src, progress=progress, debug=debug)
+        if debug:
+            print(self.asm())
+        buf = super().acquire_decimated(soc, soft_avgs=self.soft_avgs, load_pulses=True, start_src="internal", progress=True, remove_offset=True)
+        # return buf
+        # buf = super().acquire_decimated(soc, reads_per_rep=readouts_per_experiment, load_pulses=load_pulses, start_src=start_src, progress=progress, debug=debug)
         # move the I/Q axis from last to second-last
         return [np.moveaxis(d, -1, -2) for d in buf]
 
@@ -357,8 +369,9 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
         :return: 
         """
         # Timestamps, for keeping track of pulse and readout end times.
-        self._dac_ts = [0] * len(self._dac_ts)
-        self._adc_ts = [0] * len(self._adc_ts)
+        self.reset_timestamps()
+        # self._gen_ts = [0] * len(self._gen_ts)
+        # self._ro_ts = [0] * len(self._ro_ts)
 
 
 class NDAveragerProgram(APAveragerProgram):
@@ -374,11 +387,22 @@ class NDAveragerProgram(APAveragerProgram):
         """
         Constructor for the NDAveragerProgram. Make the ND sweep asm commands.
         """
+        # super().__init__(soccfg, cfg)
+        # self.qick_sweeps: List[AbsQickSweep] = []
+        # self.expts = 1
+        # self.sweep_axes = []
+        # self.make_program()
         super().__init__(soccfg, cfg)
+        self.cfg = cfg
         self.qick_sweeps: List[AbsQickSweep] = []
         self.expts = 1
         self.sweep_axes = []
         self.make_program()
+        # self.soft_avgs = 1
+        loop_dims = [cfg['reps'], *self.sweep_axes[::-1]]
+        # average over the reps axis
+        self.setup_acquire(counter_addr=self.COUNTER_ADDR, loop_dims=loop_dims, avg_level=0)
+     
 
     def initialize(self):
         """
@@ -415,10 +439,14 @@ class NDAveragerProgram(APAveragerProgram):
         rcount = 13  # total run counter
         rep_count = 14  # repetition counter
 
+        # n_sweeps = len(self.qick_sweeps)
+        # if n_sweeps > 7:  # to be safe, only register 15-21 in page 0 can be used as sweep counters
+        #     raise OverflowError(f"too many qick inner loops ({n_sweeps}), run out of counter registers")
+        # counter_regs = (np.arange(n_sweeps) + 15).tolist()  # not sure why this has to be a list (np.array doesn't work)
         n_sweeps = len(self.qick_sweeps)
-        if n_sweeps > 7:  # to be safe, only register 15-21 in page 0 can be used as sweep counters
+        if n_sweeps > 5:  # to be safe, only register 17-21 in page 0 can be used as sweep counters
             raise OverflowError(f"too many qick inner loops ({n_sweeps}), run out of counter registers")
-        counter_regs = (np.arange(n_sweeps) + 15).tolist()  # not sure why this has to be a list (np.array doesn't work)
+        counter_regs = (np.arange(n_sweeps) + 17).tolist()  # not sure why this has to be a list (np.array doesn't work)
 
         p.regwi(0, rcount, 0)  # reset total run count
 
@@ -457,7 +485,7 @@ class NDAveragerProgram(APAveragerProgram):
         return sweep_pts
 
     def acquire(self, soc, threshold: int = None, angle: List = None, load_pulses=True, readouts_per_experiment=None,
-                save_experiments: List = None, start_src: str = "internal", progress=False, debug=False):
+                save_experiments: List = None, start_src: str = "internal", progress=False, remove_offset=True, debug=False):
         """
         This method optionally loads pulses on to the SoC, configures the ADC readouts, loads the machine code
         representation of the AveragerProgram onto the SoC, starts the program and streams the data into the Python,
@@ -476,52 +504,114 @@ class NDAveragerProgram(APAveragerProgram):
         :param load_pulses: If true, loads pulses into the tProc
         :param start_src: "internal" (tProc starts immediately) or "external" (each round waits for an external trigger)
         :param progress: If true, displays progress bar
-        :param debug: If true, displays assembly code for tProc program
         :returns:
             - expt_pts (:py:class:`list`) - list of experiment points
             - avg_di (:py:class:`list`) - list of lists of averaged accumulated I data for ADCs 0 and 1
             - avg_dq (:py:class:`list`) - list of lists of averaged accumulated Q data for ADCs 0 and 1
         """
+        if debug:
+            print(self.asm())
 
-        self.shot_angle = angle
-        self.shot_threshold = threshold
+        if readouts_per_experiment is not None:
+            self.set_reads_per_shot(readouts_per_experiment)
 
-        if readouts_per_experiment is None:
-            readouts_per_experiment = self.readout_per_exp
-
-        if save_experiments is None:
-            save_experiments = range(readouts_per_experiment)
-
-        # avg_d calculated in QickProgram.acquire() assumes a different data shape, here we will recalculate based on
-        # the d_buf returned.
-        d_buf, avg_d, shots = super().acquire(soc, reads_per_rep=readouts_per_experiment, load_pulses=load_pulses,
-                                              start_src=start_src, progress=progress, debug=debug)
+        avg_d = super().acquire(soc, soft_avgs=self.soft_avgs, load_pulses=load_pulses,
+                                              start_src=start_src, 
+                                              threshold=threshold, angle=angle,
+                                              progress=progress,
+                                              remove_offset=remove_offset)
 
         # reformat the data into separate I and Q arrays
         # save results to class in case you want to look at it later or for analysis
-        self.di_buf = d_buf[:, :, 0]
-        self.dq_buf = d_buf[:, :, 1]
-
-        if threshold is not None:
-            self.shots = shots
+        raw = [d.reshape((-1,2)) for d in self.get_raw()]
+        self.di_buf = [d[:,0] for d in raw]
+        self.dq_buf = [d[:,1] for d in raw]
 
         expt_pts = self.get_expt_pts()
 
         n_ro = len(self.ro_chs)
-        avg_di = np.zeros((n_ro, len(save_experiments), self.expts))
-        avg_dq = np.zeros((n_ro, len(save_experiments), self.expts))
+        if save_experiments is None:
+            avg_di = [d[..., 0] for d in avg_d]
+            avg_dq = [d[..., 1] for d in avg_d]
+        else:
+            avg_di = [np.zeros((len(save_experiments), *d.shape[1:])) for d in avg_d]
+            avg_dq = [np.zeros((len(save_experiments), *d.shape[1:])) for d in avg_d]
+            for i_ch in range(n_ro):
+                for nn, ii in enumerate(save_experiments):
+                    avg_di[i_ch][nn] = avg_d[i_ch][ii, ..., 0]
+                    avg_dq[i_ch][nn] = avg_d[i_ch][ii, ..., 1]
 
-        for nn, ii in enumerate(save_experiments):
-            for i_ch, (ch, ro) in enumerate(self.ro_chs.items()):
-                avg_di[i_ch][nn] = avg_d[i_ch, ii, ..., 0]
-                avg_dq[i_ch][nn] = avg_d[i_ch, ii, ..., 1]
+        self.di_buf_p = np.array(self.di_buf).reshape(n_ro, self.reps, -1)
+        self.dq_buf_p = np.array(self.dq_buf).reshape(n_ro, self.reps, -1)
 
-        self.di_buf_p = self.di_buf.reshape(n_ro, self.reps, -1)
-        self.dq_buf_p = self.dq_buf.reshape(n_ro, self.reps, -1)
+        return expt_pts, np.array(avg_di), np.array(avg_dq)
 
-        return expt_pts, avg_di, avg_dq
-
-    def _average_buf(self, d_reps, reads_per_rep: int):
+    # def acquire(self, soc, threshold: int = None, angle: List = None, load_pulses=True, readouts_per_experiment=None,
+    #             save_experiments: List = None, start_src: str = "internal", progress=False, debug=False):
+    #     """
+    #     This method optionally loads pulses on to the SoC, configures the ADC readouts, loads the machine code
+    #     representation of the AveragerProgram onto the SoC, starts the program and streams the data into the Python,
+    #     returning it as a set of numpy arrays.
+    #     Note here the buf data has "reps" as the outermost axis, and the first swept parameter corresponds to the
+    #     innermost axis.
+    # 
+    #     config requirements:
+    #     "reps" = number of repetitions;
+    # 
+    #     :param soc: Qick object
+    #     :param threshold: threshold
+    #     :param angle: rotation angle
+    #     :param readouts_per_experiment: readouts per experiment
+    #     :param save_experiments: saved readouts (by default, save all readouts)
+    #     :param load_pulses: If true, loads pulses into the tProc
+    #     :param start_src: "internal" (tProc starts immediately) or "external" (each round waits for an external trigger)
+    #     :param progress: If true, displays progress bar
+    #     :param debug: If true, displays assembly code for tProc program
+    #     :returns:
+    #         - expt_pts (:py:class:`list`) - list of experiment points
+    #         - avg_di (:py:class:`list`) - list of lists of averaged accumulated I data for ADCs 0 and 1
+    #         - avg_dq (:py:class:`list`) - list of lists of averaged accumulated Q data for ADCs 0 and 1
+    #     """
+    # 
+    #     self.shot_angle = angle
+    #     self.shot_threshold = threshold
+    # 
+    #     if readouts_per_experiment is None:
+    #         readouts_per_experiment = self.readout_per_exp
+    # 
+    #     if save_experiments is None:
+    #         save_experiments = range(readouts_per_experiment)
+    # 
+    #     # avg_d calculated in QickProgram.acquire() assumes a different data shape, here we will recalculate based on
+    #     # the d_buf returned.
+    #     d_buf, avg_d, shots = super().acquire(soc, reads_per_rep=readouts_per_experiment, load_pulses=load_pulses,
+    #                                           start_src=start_src, progress=progress, debug=debug)
+    # 
+    #     # reformat the data into separate I and Q arrays
+    #     # save results to class in case you want to look at it later or for analysis
+    #     self.di_buf = d_buf[:, :, 0]
+    #     self.dq_buf = d_buf[:, :, 1]
+    # 
+    #     if threshold is not None:
+    #         self.shots = shots
+    # 
+    #     expt_pts = self.get_expt_pts()
+    # 
+    #     n_ro = len(self.ro_chs)
+    #     avg_di = np.zeros((n_ro, len(save_experiments), self.expts))
+    #     avg_dq = np.zeros((n_ro, len(save_experiments), self.expts))
+    # 
+    #     for nn, ii in enumerate(save_experiments):
+    #         for i_ch, (ch, ro) in enumerate(self.ro_chs.items()):
+    #             avg_di[i_ch][nn] = avg_d[i_ch, ii, ..., 0]
+    #             avg_dq[i_ch][nn] = avg_d[i_ch, ii, ..., 1]
+    # 
+    #     self.di_buf_p = self.di_buf.reshape(n_ro, self.reps, -1)
+    #     self.dq_buf_p = self.dq_buf.reshape(n_ro, self.reps, -1)
+    # 
+    #     return expt_pts, avg_di, avg_dq
+    
+    def _average_buf(self, d_reps, reads_per_rep: int, length_norm: bool=True, remove_offset: bool=True):
         """
         overwrites the default _average_buf method in QickProgram. Here "reps" is the outermost axis, and we reshape
         avg_d to the shape of the sweep axes.
@@ -529,11 +619,13 @@ class NDAveragerProgram(APAveragerProgram):
         :param reads_per_rep:
         :return:
         """
+        reads_per_rep = reads_per_rep[0]
         avg_d = np.zeros((len(self.ro_chs), reads_per_rep, self.expts, 2))
         for ii in range(reads_per_rep):
             for i_ch, (ch, ro) in enumerate(self.ro_chs.items()):
-                avg_d[i_ch][ii] = np.sum(d_reps[i_ch][ii::reads_per_rep, :].reshape((self.reps, self.expts, 2)),
-                                         axis=0) / (self.reps * ro['length'])
+                avg_d[i_ch][ii] = np.sum(d_reps[i_ch].reshape((-1, 2))[ii::reads_per_rep, :].reshape((self.reps, self.expts, 2)), axis=0)
+                if length_norm:
+                    avg_d[i_ch][ii] /= (self.reps * ro['length'])
         return avg_d
 
 
@@ -544,71 +636,252 @@ class QCAveragerProgram(NDAveragerProgram):
     :param cfg: Configuration dictionary
     :type cfg: dict
     """
+
     def __init__(self, soccfg, cfg, qc_cfg):
         """
         Constructor for the QCAveragerProgram. Make the ND sweep asm commands.
         """
         self.qc_cfg = qc_cfg
+        self.phaseOffset_dict = self._init_phaseOffset_dict()
         super().__init__(soccfg, cfg)
+        # self.dac_ts_dict = self._init_gen_ts_list()
 
-    def _add_gate(self, pulse_name: str = None, p_cfg: dict = None, phase_offset: float = 0):
-        def _get_ch(ch: int|str):
-            if type(ch) is str:
-                ch = self.cfg["gen_chs"][ch]["ch"]
-            return ch
+    def _init_phaseOffset_dict(self):
+        q_cfg = self.qc_cfg['qubit_config']
+        qubit_phase = {}
+        for k in q_cfg.keys():
+            qubit_phase[k] = 0
+        return qubit_phase
 
-        if pulse_name in self.qc_cfg['pulse_config'].keys():
-            try:
-                p_cfg = self.qc_cfg['pulse_config'][pulse_name]
-            except:
-                raise ValueError(f'{pulse_name} is unavailable in config')
-        elif p_cfg is not None:
-            pass
-        else:
-            raise ValueError('No available pulse config')
+    def reset_phaseOffset_dict(self):
+        for k in self.phaseOffset_dict.keys():
+            self.phaseOffset_dict[k] = 0
 
-        try:
-            qubit = p_cfg.pop('qubit')
-        except:
-            pass
+    # def _init_gen_ts_list(self):
+    #     dac_ts_list = [0] * len(self.soccfg['gens'])
+    #     return dac_ts_list
+    #
+    # def sync_gen_ts(self):
+    #     self.dac_ts_list = max(self.dac_ts_list) * len(self.soccfg['gens'])
+
+    def _get_ch_idx(self, ch):
+        '''
+        get channel index from channel name
+        :param ch: the name of channel defined in yaml file
+        :return: channel index defined in soccfg
+        '''
+        if type(ch) is str:
+            ch = self.cfg["gen_chs"][ch]["ch"]
+        return ch
+
+    def _del_aux_params(self, p_cfg):
+        params_accepted = ['gen_ch', 'style', 'freq', 'phase', 'gain', 'phrst', 'stdysel',
+                           'mode', 'outsel', 'length', 'waveform', 'mask']
+        for k in list(p_cfg.keys()):
+            if k not in params_accepted:
+                p_cfg.pop(k)
+        return p_cfg
+
+    def pulse_cycle(self, p_cfg):
+        ch = self._get_ch_idx(p_cfg["gen_ch"])
+        fclk = self.soccfg['gens'][ch]['f_fabric']
+        samps_per_clk = self.soccfg['gens'][ch]['samps_per_clk']
+        p_cycle = len(self.envelopes[ch]['envs'][p_cfg['waveform']]['data']) / samps_per_clk
+        return p_cycle
+
+    def _pulse_phaseOffset(self, p_cfg):
+        if 'phaseOffset' not in p_cfg.keys():
+            return 0
+
+        ch = self._get_ch_idx(ch=p_cfg["gen_ch"])
+        soc_gencfg = self.soccfg['gens'][ch]
+        fclk = soc_gencfg['f_fabric']
+        samps_per_clk = soc_gencfg['samps_per_clk']
+
+        qubit = self.cfg['qubit']
+        freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
+        phi0 = p_cfg['phaseOffset']
+        # print(f"phi_offset: {phi0}")
+
+        wf_cfg = self.cfg['waveforms'][p_cfg['waveform']]
+        pulse_cyc = len(self.envelopes[ch]['envs'][p_cfg['waveform']]['data']) / samps_per_clk
         
-        ch = _get_ch(p_cfg["gen_ch"])
+        # padding = np.array([0, wf_cfg['padding']]) if isinstance(wf_cfg['padding'], int | float) else np.array(wf_cfg["padding"])
+        # pad_samps = np.ceil(padding[0] * fclk * samps_per_clk) + np.ceil(padding[1] * fclk * samps_per_clk)
+        # length0 = (pulse_cyc * samps_per_clk - pad_samps) / (fclk * samps_per_clk)
+        # phi0 = (phi0 - 360 * (wf_cfg['length'] - length0) * freqDiff / 3) % 120
+        
+        phi0 = (phi0 - 360 * (wf_cfg['length'] - pulse_cyc / fclk) * freqDiff / 3) % 120
+        # print("phi0:", phi0, "phi adjust", 360 * (wf_cfg['length'] - pulse_cyc / fclk) * freqDiff / 3, "pulse_cyc:", pulse_cyc)
 
-        if p_cfg['style'] == "arb" or p_cfg['style'] == 'flat_top':
-            if p_cfg["waveform"] not in self._gen_mgrs[ch].pulses.keys():
+        pulse_len = self.pulse_cycle(p_cfg) * self.soccfg.cycles2us(1)
+        phi1 = (freqDiff / 3 * pulse_len * 360)
+        phaseOffset = (phi0 - phi1) % 120
+
+        # phaseOffset = (phi0) % 120
+        
+        # print(f"phi0: {phi0}, phi1: {phi1}, phi_offset: {(phi0 - phi1) % 120}")
+        return phaseOffset
+
+    def update_pulse_phase(self, p_cfg, phase_offset=0):
+        ch = self._get_ch_idx(ch=p_cfg["gen_ch"])
+        qubit = p_cfg.get('qubit')
+
+        pulPhaseOffset = self._pulse_phaseOffset(p_cfg)
+
+        freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
+        phaseDiff = 360 * freqDiff / 3 * self.soccfg.cycles2us(1) * self._gen_ts[ch]
+        # print("t: ", self._gen_ts[ch], 'qubit phase offset: ', self.phaseOffset_dict[qubit])
+        p_cfg['phase'] += self.phaseOffset_dict[qubit] + phaseDiff + 0 * pulPhaseOffset + phase_offset  # double check this
+        # print(f"update_pulse_phase: {p_cfg['phase']}")
+        # print("p_cfg phase:", p_cfg["phase"], self.phaseOffset_dict[qubit], phaseDiff, pulPhaseOffset, phase_offset)
+        return p_cfg
+
+    def add_gate_by_config(self, p_cfg: dict, phase_offset: float = 0):
+        qubit = p_cfg['qubit']
+        ch = self._get_ch_idx(ch=p_cfg["gen_ch"])
+        if p_cfg['style'] == "arb" or p_cfg['style'] == 'flat_top':  # add waveform to memory
+            if p_cfg["waveform"] not in self.envelopes[ch]['envs'].keys():
                 self.add_waveform_from_cfg(p_cfg["gen_ch"], p_cfg["waveform"])
-            self.set_pulse_params(**p_cfg)
         elif p_cfg['style'] == 'const':
-            self.set_pulse_params(**p_cfg)
+            pass
         else:
             raise ValueError("Not supported pulse style. Choose from 'arb', 'flat_top' or 'const'.")
+        p_cfg = self.update_pulse_phase(p_cfg, phase_offset=phase_offset)
+        self.phaseOffset_dict[qubit] += self._pulse_phaseOffset(p_cfg)
+        p_cfg = self._del_aux_params(p_cfg)
 
+        self.set_pulse_params(**p_cfg)
+        self.pulse(ch)  # add pulse to program
+
+    def add_gate_by_name(self, pulse_name: str, phase_offset: float = 0):
+        if pulse_name not in self.qc_cfg['pulse_config'].keys():
+            raise ValueError(f'{pulse_name} is unavailable in config')
+        p_cfg = self.qc_cfg['pulse_config'][pulse_name].copy()
+        # if 'vz' not in pulse_name:
+        if pulse_name[0] != 'z':
+            self.add_gate_by_config(p_cfg, phase_offset)
+        else:
+            self.add_zgate(p_cfg['qubit'], p_cfg['phase'])
+            # self.phaseOffset_dict[p_cfg['qubit']] -= p_cfg['phase']
+
+    def add_gate_concatenate(self, gate_seq: list, seq_name: str, phase_offset: float = 0):
+        p0_cfg = self.qc_cfg['pulse_config'][gate_seq[0]].copy()
+        ch = self._get_ch_idx(p0_cfg["gen_ch"])
+        fclk = self.soccfg['gens'][ch]['f_fabric']
+        samps_per_clk = self.soccfg['gens'][ch]['samps_per_clk']
+        p0_cfg['waveform'] = seq_name
+
+        p_cfg_list = []  # generate the list of pulse config
+        qubit = p0_cfg['qubit']
+        t0 = self._gen_ts[ch]
+        if seq_name not in self.envelopes[ch]['envs'].keys():
+            for gate in gate_seq:
+                gate_gain = self.qc_cfg['pulse_config'][gate].get('gain', 0)
+                p0_cfg['gain'] = np.max([gate_gain, p0_cfg['gain']])
+                if 'Id' in gate:
+                    pass  # TODO: fix this. It should be a pulse with amplitude equals to zero
+                elif 'z' not in gate:
+                    p_cfg = self.qc_cfg['pulse_config'][gate].copy()
+                    # if 'phaseOffset' in p_cfg.keys():  # correct pulse phase if required
+                    #     pulPhaseOffset = self._pulse_phaseOffset(p_cfg)
+                    #     p_cfg.pop('phaseOffset')
+                    # else:
+                    #     pulPhaseOffset = 0
+                    # freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
+                    # phaseDiff = 360 * freqDiff / 3 * self.soccfg.cycles2us(1) * t0
+                    # p_cfg = self.update_pulse_phase(p_cfg, phase_offset=phaseDiff + pulPhaseOffset + phase_offset)
+                    freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
+                    phaseDiff = 360 * freqDiff / 3 * self.soccfg.cycles2us(1) * t0  # todo: only works for 4-wave subharmonic, should make it general
+                    p_cfg = self.update_pulse_phase(p_cfg, phase_offset=phaseDiff + phase_offset)
+                    p_cfg.update(self.cfg['waveforms'][p_cfg['waveform']])  # add item('shape') to p_cfg
+                    p_cfg_list.append(p_cfg)
+                    self.phaseOffset_dict[qubit] += self._pulse_phaseOffset(p_cfg)
+                    t0 += self.pulse_cycle(p_cfg)
+                else:
+                    self.phaseOffset_dict[qubit] -= self.qc_cfg['pulse_config'][gate]['phase']
+            add_pulse_concatenate(self, ch, seq_name, p_cfg_list)
+
+        p0_cfg = self._del_aux_params(p0_cfg)
+        self.set_pulse_params(**p0_cfg)
+        self.pulse(ch)
+
+    def add_gate_chirp_concatenate(self, gate_seq: list, seq_name: str, detune, phase_offset: float = 0):
+        p0_cfg = self.qc_cfg['pulse_config'][gate_seq[0]].copy()
+        ch = self._get_ch_idx(p0_cfg["gen_ch"])
+        fclk = self.soccfg['gens'][ch]['f_fabric']
+        samps_per_clk = self.soccfg['gens'][ch]['samps_per_clk']
+        p0_cfg['waveform'] = seq_name
+
+        p_cfg_list = []  # generate the list of pulse config
+        qubit = p0_cfg['qubit']
+        t0 = self._gen_ts[ch]
+        if seq_name not in self.envelopes[ch]['envs'].keys():
+            for gate in gate_seq:
+                gate_gain = self.qc_cfg['pulse_config'][gate].get('gain', 0)
+                p0_cfg['gain'] = np.max([gate_gain, p0_cfg['gain']])
+                if 'Id' in gate:
+                    pass  # TODO: fix this. It should be a pulse with amplitude equals to zero
+                elif 'z' not in gate:
+                    p_cfg = self.qc_cfg['pulse_config'][gate].copy()
+                    # if 'phaseOffset' in p_cfg.keys():  # correct pulse phase if required
+                    #     pulPhaseOffset = self._pulse_phaseOffset(p_cfg)
+                    #     p_cfg.pop('phaseOffset')
+                    # else:
+                    #     pulPhaseOffset = 0
+                    # freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
+                    # phaseDiff = 360 * freqDiff / 3 * self.soccfg.cycles2us(1) * t0
+                    # p_cfg = self.update_pulse_phase(p_cfg, phase_offset=phaseDiff + pulPhaseOffset + phase_offset)
+                    freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
+                    phaseDiff = 360 * freqDiff / 3 * self.soccfg.cycles2us(1) * t0  # todo: only works for 4-wave subharmonic, should make it general
+                    p_cfg = self.update_pulse_phase(p_cfg, phase_offset=phaseDiff + phase_offset)
+                    p_cfg.update(self.cfg['waveforms'][p_cfg['waveform']])  # add item('shape') to p_cfg
+                    p_cfg_list.append(p_cfg)
+                    self.phaseOffset_dict[qubit] += self._pulse_phaseOffset(p_cfg)
+                    t0 += self.pulse_cycle(p_cfg)
+                else:
+                    self.phaseOffset_dict[qubit] -= self.qc_cfg['pulse_config'][gate]['phase']
+
+            CM.add_pulse_chirp_concatenate(self, ch, seq_name, p_cfg_list, detune=detune)
+
+        p0_cfg = self._del_aux_params(p0_cfg)
+        self.set_pulse_params(**p0_cfg)
         self.pulse(ch)
 
     def add_x(self, qubit: str, **kwargs):
-        self._add_gate(pulse_name=f'x_{qubit}', **kwargs)
-        pass
+        self.add_gate_by_name(pulse_name=f'x_{qubit}', **kwargs)
 
     def add_x2(self, qubit: str, **kwargs):
-        self._add_gate(pulse_name=f'x2_{qubit}', **kwargs)
-        pass
+        self.add_gate_by_name(pulse_name=f'x2_{qubit}', **kwargs)
 
     def add_y(self, qubit: str, **kwargs):
-        self._add_gate(pulse_name=f'y_{qubit}', **kwargs)
-        pass
+        self.add_gate_by_name(pulse_name=f'y_{qubit}', **kwargs)
 
     def add_y2(self, qubit: str, **kwargs):
-        self._add_gate(pulse_name=f'y2_{qubit}', **kwargs)
+        self.add_gate_by_name(pulse_name=f'y2_{qubit}', **kwargs)
+
+    def add_zgate(self, qubit: str, phase: float):
+        self.phaseOffset_dict[qubit] -= phase
+
+    def add_iswap(self: QickProgram, q_drive_ch: str, pulse_cfg: dict = None):
         pass
 
-    def add_zgate(self, qubit: str, **kwargs):
+    def add_rtiswap(self: QickProgram, q_drive_ch: str, pulse_cfg: dict = None):
         pass
 
-    def add_iswap(self: QickProgram, q_drive_ch: str, pulse_cfg: dict=None):
-        pass
-
-    def add_rtiswap(self: QickProgram, q_drive_ch: str, pulse_cfg: dict=None):
-        pass
+    def tomo(self, core: Callable, res_ch: str, syncdelay: float, ro_ch=None, phase_off=0, suffix: str=None):
+        for gate in ["y2N", "x2", "Id"]:
+            core()
+            if gate != "Id":
+                self.add_gate_by_name(gate+f"_{suffix}")
+            self.sync_all(10)  # align channels and wait
+            # add measurement
+            self.measure(pulse_ch=self.cfg["gen_chs"][res_ch]["ch"],
+                         adcs=ro_ch,
+                         pins=[0],
+                         adc_trig_offset=self.cfg["adc_trig_offset"],
+                         wait=True,
+                         syncdelay=self.us2cycles(syncdelay))
 
 
 class QubitMsmtMixin:
@@ -784,7 +1057,7 @@ class QubitMsmtMixin:
                                   phase=phase_t, freq=q_pulse_cfg["ge_freq"], gain=gain_t)
 
             self.pulse(ch=self.cfg["gen_chs"][q_drive_ch]["ch"])
-            self.sync_all(0.05)  # align channels and wait
+            self.sync_all(10)  # align channels and wait
 
             # add measurement
             self.measure(pulse_ch=self.cfg["gen_chs"][res_ch]["ch"],
