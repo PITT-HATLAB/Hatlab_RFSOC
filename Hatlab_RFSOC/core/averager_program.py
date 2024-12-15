@@ -950,6 +950,36 @@ class QubitMsmtMixin:
         self.add_prepare_msmt_general(q_drive_ch, q_pulse_cfg_, res_ch, syncdelay, adcs)
 
 
+    def add_efprepare_msmt(self: QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
+                         prepare_q_gain: int = None, adcs=None):
+        """
+        add a state preparation measurement to the qick asm program.
+
+        :param self:
+        :param q_drive_ch: Qubit drive channel name
+        :param q_pulse_cfg: Qubit drive pulse_cfg, should be the "q_pulse_cfg" in the yml file, which contains the
+            "ge_freq".
+        :param res_ch: Resonator drive channel name
+        :param syncdelay: time to wait after msmt, in us
+        :param prepare_q_gain: q drive gain for the prepare pulse
+        :return:
+        """
+        if prepare_q_gain is None:
+            prepare_q_gain = int(q_pulse_cfg["pi2_gain"])
+
+        q_pulse_cfg_ = dict(style="arb", waveform=q_pulse_cfg["waveform"],
+                            phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
+        self.set_pulse_params(q_drive_ch, style='arb', waveform=q_pulse_cfg['waveform'],
+                              phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg['ge_freq'], gain=q_pulse_cfg['pi_gain'])
+        self.pulse(ch=self.cfg['gen_chs'][q_drive_ch]['ch']) #play ge pi
+        self.sync_all(self.us2cycles(0.01))
+        self.set_pulse_params(q_drive_ch, style='arb', waveform=q_pulse_cfg['waveform'],
+                              phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg['ef_freq'], gain=int(q_pulse_cfg['ef_pi2_gain']*0.5))
+        self.pulse(ch=self.cfg['gen_chs'][q_drive_ch]['ch']) #play ge pi/2
+        self.sync_all(self.us2cycles(0.01))
+
+        self.add_prepare_msmt_general(q_drive_ch, q_pulse_cfg_, res_ch, syncdelay, adcs)
+
 
     def add_prepare_msmt_general(self:QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
                          adcs=None):
