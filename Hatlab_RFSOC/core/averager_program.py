@@ -727,13 +727,13 @@ class QCAveragerProgram(NDAveragerProgram):
         ch = self._get_ch_idx(ch=p_cfg["gen_ch"])
         qubit = p_cfg.get('qubit')
 
-        pulPhaseOffset = self._pulse_phaseOffset(p_cfg)
+        # pulPhaseOffset = self._pulse_phaseOffset(p_cfg)
 
         freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
         phaseDiff = 360 * freqDiff / 3 * self.soccfg.cycles2us(1) * self._gen_ts[ch]
         # print("t: ", self._gen_ts[ch], 'qubit phase offset: ', self.phaseOffset_dict[qubit])
-        p_cfg['phase'] += self.phaseOffset_dict[qubit] + phaseDiff + 0 * pulPhaseOffset + phase_offset  # double check this
-        # print(f"update_pulse_phase: {p_cfg['phase']}")
+        # p_cfg['phase'] += self.phaseOffset_dict[qubit] + phaseDiff + 0 * pulPhaseOffset + phase_offset  # double check this
+        p_cfg['phase'] += self.phaseOffset_dict[qubit] + phaseDiff + phase_offset  # double check this
         # print("p_cfg phase:", p_cfg["phase"], self.phaseOffset_dict[qubit], phaseDiff, pulPhaseOffset, phase_offset)
         return p_cfg
 
@@ -766,7 +766,7 @@ class QCAveragerProgram(NDAveragerProgram):
             # self.phaseOffset_dict[p_cfg['qubit']] -= p_cfg['phase']
 
     def add_gate_concatenate(self, gate_seq: list, seq_name: str, phase_offset: float = 0):
-        p0_cfg = self.qc_cfg['pulse_config'][gate_seq[0]].copy()
+        p0_cfg = deepcopy(self.qc_cfg['pulse_config'][gate_seq[0]])
         ch = self._get_ch_idx(p0_cfg["gen_ch"])
         fclk = self.soccfg['gens'][ch]['f_fabric']
         samps_per_clk = self.soccfg['gens'][ch]['samps_per_clk']
@@ -807,7 +807,8 @@ class QCAveragerProgram(NDAveragerProgram):
         self.pulse(ch)
 
     def add_gate_chirp_concatenate(self, gate_seq: list, seq_name: str, detune, phase_offset: float = 0):
-        p0_cfg = self.qc_cfg['pulse_config'][gate_seq[0]].copy()
+        # p0_cfg = deepcopy(self.qc_cfg['pulse_config'][gate_seq[0]])
+        p0_cfg = deepcopy(self.qc_cfg['pulse_config']["x_SH_q4"])
         ch = self._get_ch_idx(p0_cfg["gen_ch"])
         fclk = self.soccfg['gens'][ch]['f_fabric']
         samps_per_clk = self.soccfg['gens'][ch]['samps_per_clk']
@@ -832,7 +833,7 @@ class QCAveragerProgram(NDAveragerProgram):
                     # freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
                     # phaseDiff = 360 * freqDiff / 3 * self.soccfg.cycles2us(1) * t0
                     # p_cfg = self.update_pulse_phase(p_cfg, phase_offset=phaseDiff + pulPhaseOffset + phase_offset)
-                    freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
+                    freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * (p_cfg['freq'])
                     phaseDiff = 360 * freqDiff / 3 * self.soccfg.cycles2us(1) * t0  # todo: only works for 4-wave subharmonic, should make it general
                     p_cfg = self.update_pulse_phase(p_cfg, phase_offset=phaseDiff + phase_offset)
                     p_cfg.update(self.cfg['waveforms'][p_cfg['waveform']])  # add item('shape') to p_cfg
