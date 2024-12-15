@@ -52,4 +52,4 @@ if __name__ == "__main__":
         g_pct, I_vld, Q_vld, selData = simpleSelection_1Qge(bufi, bufq)
         fit = qf.T2Ramsey(sweepTime, g_pct)
         fitResult = fit.run()
-        fitResult.plot(xlabel="Gain (DAC)", ylabel="g pct")
+        fitResult.plot(xlabel="time (us)", ylabel="g pct")
