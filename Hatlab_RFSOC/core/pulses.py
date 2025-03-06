@@ -114,3 +114,42 @@ def add_gaussian(prog: QickProgram, gen_ch:str, name, sigma:float, length:float,
 
 
 
+def add_pulse_concatenate(prog: QickProgram, gen_ch: str|int, name, gatelist, maxv=None):
+    gen_ch = prog.cfg["gen_chs"][gen_ch]["ch"] if type(gen_ch)==str else gen_ch
+    soc_gencfg = prog.soccfg['gens'][gen_ch]
+    if maxv is None: maxv = soc_gencfg['maxv'] * soc_gencfg['maxv_scale']
+    samps_per_clk = soc_gencfg['samps_per_clk']
+    fclk = soc_gencfg['f_fabric']
+    
+    wfdata_i = []
+    wfdata_q = []
+    wf_len_list = []
+    for gate in gatelist:
+        maxv_p = gate.get('maxv', maxv)
+        if gate['shape'] == 'gaussian':
+            length_reg = gate['length'] * fclk * samps_per_clk
+            sigma_reg = gate['sigma'] * fclk * samps_per_clk
+            pulsedata = gaussian(sigma_reg, length_reg, maxv=maxv_p)
+
+        elif gate['shape'] == 'tanh_box':
+            length_reg = gate['length'] * fclk * samps_per_clk
+            ramp_reg = gate['ramp_width'] * fclk * samps_per_clk
+            pulsedata = tanh_box(length_reg, ramp_reg, maxv=maxv_p)
+
+        else:
+            raise NameError(f"unsupported pulse shape {gate['shape']}")
+
+        padding = gate.get('padding')
+        if gate['padding'] is not None:
+            pulsedata = add_padding(pulsedata, soc_gencfg, padding)
+
+        wfdata_i = np.concatenate((wfdata_i, pulsedata * np.cos(gate['phase'] / 360 * 2 * np.pi)))
+        wfdata_q = np.concatenate((wfdata_q, pulsedata * np.sin(gate['phase'] / 360 * 2 * np.pi)))
+        zero_padding = np.zeros((16 - len(wfdata_i)) % 16)
+        wfdata_i = np.concatenate((wfdata_i, zero_padding))
+        wfdata_q = np.concatenate((wfdata_q, zero_padding))
+        # wf_len_list.append(len(wfdata_i) / 16.0)
+        
+    # print(wf_len_list)
+    prog.add_pulse(gen_ch, name, idata=wfdata_i, qdata=wfdata_q)
+    
