@@ -394,7 +394,6 @@ def save_data_raw(filepath, filename, avg_i, avg_q, buf_i=None, buf_q=None, conf
 
     with ddw as dw:
         if config is not None:
-            # dw.save_config(config)
             dw.save_config(to_yaml_friendly({"config": config, "info": info}))
         if outer_sweeps is not None:
             outer_dict = outer_sweeps.to_dict()
