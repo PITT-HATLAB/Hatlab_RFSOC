@@ -1,13 +1,14 @@
 from typing import Dict, List, Union, Callable, Literal, Tuple
 import warnings
 
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 import numpy as np
 
 from qick.qick_asm import QickProgram, FullSpeedGenManager, QickRegister, QickRegisterManagerMixin
 from qick.averager_program import AbsQickSweep, QickSweep, NDAveragerProgram
 
-from .pulses import add_gaussian, add_tanh
+from .pulses import add_gaussian, add_tanh, add_pulse_concatenate
 
 RegisterTypes = Literal["freq", "time", "phase", "adc_freq"]
 
@@ -83,7 +84,6 @@ class FlatTopGainSweep(QickSweep):
         """
         self.gain_reg = prog.get_gen_reg(gen_ch, "gain")
         super().__init__(prog, self.gain_reg, start, stop, expts, label)
-
         # flat part gain
         self.gain2_reg = prog.get_gen_reg(gen_ch, "gain2")
         self.gain2_reg.init_val = start // 2
