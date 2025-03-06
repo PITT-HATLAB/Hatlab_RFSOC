@@ -20,7 +20,7 @@ def tanh_box(length: int, ramp_width: int, cut_offset=0.01, maxv=30000):
     k_ = (c1_ - c0_) / ramp_width
     y = (0.5 * (np.tanh(k_ * x + c0_) - np.tanh(k_ * (x - length) - c0_)) - cut_offset) / (
                 1 - cut_offset) * maxv
-    return y
+    return y - np.min(y)
 
 
 
@@ -34,6 +34,7 @@ def gaussian(sigma: int, length: int, maxv=30000):
     """
     x = np.arange(0, length)
     y = maxv * np.exp(-(x - length/2) ** 2 / sigma ** 2)
+    y = y - np.min(y)
     return y
 
 
