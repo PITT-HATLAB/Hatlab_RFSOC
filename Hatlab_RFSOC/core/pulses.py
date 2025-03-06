@@ -37,6 +37,23 @@ def gaussian(sigma: int, length: int, maxv=30000):
     y = y - np.min(y)
     return y
 
+def add_padding(data, soc_gencfg, padding):
+    """
+    pad some zeros before and/or after the waveform data
+    :param data: 
+    :param soc_gencfg: gen_ch config
+    :param padding: the length of padding in us
+    :return: 
+    """
+    samps_per_clk = soc_gencfg['samps_per_clk']
+    fclk = soc_gencfg['f_fabric']
+    
+    if isinstance(padding, int|float):
+        padding = np.array([0, padding])
+    else:
+        padding = np.array(padding)
+    padding_samp = np.ceil(padding * fclk * samps_per_clk)
+    data = np.concatenate((np.zeros(int(padding_samp[0])), data, np.zeros(int(padding_samp[1]))))
 
 def add_tanh(prog: QickProgram, gen_ch, name, length:float, ramp_width:float, cut_offset:float=0.01, maxv=None):
     """Adds a smooth box pulse made of two tanh functions to the waveform library, using physical parameters of the pulse.
