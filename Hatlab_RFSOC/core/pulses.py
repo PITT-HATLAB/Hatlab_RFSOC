@@ -55,7 +55,10 @@ def add_padding(data, soc_gencfg, padding):
     padding_samp = np.ceil(padding * fclk * samps_per_clk)
     data = np.concatenate((np.zeros(int(padding_samp[0])), data, np.zeros(int(padding_samp[1]))))
 
-def add_tanh(prog: QickProgram, gen_ch, name, length:float, ramp_width:float, cut_offset:float=0.01, maxv=None):
+    return data
+
+def add_tanh(prog: QickProgram, gen_ch, name, length:float, ramp_width:float, cut_offset:float=0.01, phase: float=0,
+             maxv=None, padding: Union[NumType, List[NumType]]=None, drag: float=0):
     """Adds a smooth box pulse made of two tanh functions to the waveform library, using physical parameters of the pulse.
     The pulse will peak at length/2.
 
@@ -73,6 +76,8 @@ def add_tanh(prog: QickProgram, gen_ch, name, length:float, ramp_width:float, cu
         the initial offset to cut on the tanh Function (in unit of unit-height pulse)
     maxv : float
         Value at the peak (if None, the max value for this generator will be used)
+    padding: float | List[float]
+        padding zeros in front of and at the end of the pulse
 
     """
 
@@ -89,14 +94,22 @@ def add_tanh(prog: QickProgram, gen_ch, name, length:float, ramp_width:float, cu
     ramp_reg = ramp_width * fclk * samps_per_clk
 
     wf = tanh_box(length_reg, ramp_reg, cut_offset, maxv=maxv)
+    if padding is not None:
+        wf = add_padding(wf, soc_gencfg, padding)
     zero_padding = np.zeros((16-len(wf))%16)
     wf_padded = np.concatenate((wf, zero_padding))
+    drag_padded = -np.gradient(wf_padded) * drag
 
-    prog.add_pulse(gen_ch, name, idata=wf_padded)
+    wf_idata = np.cos(np.pi / 180 * phase) * wf_padded - np.sin(np.pi / 180 * phase) * drag_padded
+    wf_qdata = np.sin(np.pi / 180 * phase) * wf_padded + np.cos(np.pi / 180 * phase) * drag_padded
+
+    # prog.add_pulse(gen_ch, name, idata=wf_padded)
+    prog.add_pulse(gen_ch, name, idata=wf_idata, qdata=wf_qdata)
 
 
 
-def add_gaussian(prog: QickProgram, gen_ch:str, name, sigma:float, length:float, maxv=None):
+def add_gaussian(prog: QickProgram, gen_ch:str, name, sigma:float, length:float, phase: float=0,
+                 maxv=None, padding: Union[NumType, List[NumType]]=None, drag: float=0):
     """Adds a gaussian pulse to the waveform library, using physical parameters of the pulse.
     The pulse will peak at length/2.
 
@@ -127,12 +140,17 @@ def add_gaussian(prog: QickProgram, gen_ch:str, name, sigma:float, length:float,
     sigma_reg = sigma * fclk * samps_per_clk
 
     wf = gaussian(sigma_reg, length_reg, maxv=maxv)
+    if padding is not None:
+        wf = add_padding(wf, soc_gencfg, padding)
     zero_padding = np.zeros((16-len(wf))%16)
     wf_padded = np.concatenate((wf, zero_padding))
+    drag_padded = -np.gradient(wf_padded) * drag
 
-    prog.add_pulse(gen_ch, name, idata=wf_padded)
+    wf_idata = np.cos(np.pi / 180 * phase) * wf_padded - np.sin(np.pi / 180 * phase) * drag_padded
+    wf_qdata = np.sin(np.pi / 180 * phase) * wf_padded + np.cos(np.pi / 180 * phase) * drag_padded
 
-
+    # prog.add_pulse(gen_ch, name, idata=wf_padded)
+    prog.add_pulse(gen_ch, name, idata=wf_idata, qdata=wf_qdata)
 
 def add_pulse_concatenate(prog: QickProgram, gen_ch: str|int, name, gatelist, maxv=None):
     gen_ch = prog.cfg["gen_chs"][gen_ch]["ch"] if type(gen_ch)==str else gen_ch
