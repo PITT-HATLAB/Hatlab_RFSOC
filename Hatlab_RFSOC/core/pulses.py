@@ -1,7 +1,9 @@
-from typing import List, Literal
+from typing import List, Literal, Union
 
 import numpy as np
 from qick.qick_asm import QickProgram
+
+NumType = Union[int, float]
 
 def tanh_box(length: int, ramp_width: int, cut_offset=0.01, maxv=30000):
     """
@@ -26,7 +28,7 @@ def gaussian(sigma: int, length: int, maxv=30000):
     """
     Create a numpy array containing a Gaussian function.
 
-    :param sigma: igma (standard deviation) of Gaussian
+    :param sigma: sigma (standard deviation) of Gaussian
     :param length: total number of points of gaussian pulse
     :return:
     """
