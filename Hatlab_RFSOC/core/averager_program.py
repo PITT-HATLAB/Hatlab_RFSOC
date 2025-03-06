@@ -549,60 +549,175 @@ class QCAveragerProgram(NDAveragerProgram):
         Constructor for the QCAveragerProgram. Make the ND sweep asm commands.
         """
         self.qc_cfg = qc_cfg
+        self.phaseOffset_dict = self._init_phaseOffset_dict()
         super().__init__(soccfg, cfg)
+        # self.dac_ts_dict = self._init_dac_ts_list()
+    
+    def _init_phaseOffset_dict(self):
+        q_cfg = self.qc_cfg['qubit_config']
+        qubit_phase = {}
+        for k in q_cfg.keys():
+            qubit_phase[k] = 0
+        return qubit_phase
 
-    def _add_gate(self, pulse_name: str = None, p_cfg: dict = None, phase_offset: float = 0):
-        def _get_ch(ch: int|str):
-            if type(ch) is str:
-                ch = self.cfg["gen_chs"][ch]["ch"]
-            return ch
+    def reset_phaseOffset_dict(self):
+        for k in self.phaseOffset_dict.keys():
+            self.phaseOffset_dict[k] = 0
+    
+    # def _init_dac_ts_list(self):
+    #     dac_ts_list = [0] * len(self.soccfg['gens'])
+    #     return dac_ts_list
+    #
+    # def sync_dac_ts(self):
+    #     self.dac_ts_list = max(self.dac_ts_list) * len(self.soccfg['gens'])
 
-        if pulse_name in self.qc_cfg['pulse_config'].keys():
-            try:
-                p_cfg = self.qc_cfg['pulse_config'][pulse_name]
-            except:
-                raise ValueError(f'{pulse_name} is unavailable in config')
-        elif p_cfg is not None:
-            pass
-        else:
-            raise ValueError('No available pulse config')
+    def _get_ch_idx(self, ch):
+        '''
+        get channel index from channel name
+        :param ch: the name of channel defined in yaml file
+        :return: channel index defined in soccfg
+        '''
+        if type(ch) is str:
+            ch = self.cfg["gen_chs"][ch]["ch"]
+        return ch
 
-        try:
-            qubit = p_cfg.pop('qubit')
-        except:
-            pass
+    def _del_aux_params(self, p_cfg):
+        params_accepted = ['gen_ch', 'style', 'freq', 'phase', 'gain', 'phrst', 'stdysel',
+                           'mode', 'outsel', 'length', 'waveform', 'mask']
+        for k in list(p_cfg.keys()):
+            if k not in params_accepted:
+                p_cfg.pop(k)
+        return p_cfg
+
+    def pulse_cycle(self, p_cfg):
+        ch = self._get_ch_idx(p_cfg["gen_ch"])
+        fclk = self.soccfg['gens'][ch]['f_fabric']
+        samps_per_clk = self.soccfg['gens'][ch]['samps_per_clk']
+        p_cycle = len(self.pulses[ch][p_cfg['waveform']]['data']) / samps_per_clk
+        return p_cycle
+
+    def _pulse_phaseOffset(self, p_cfg):
+        if 'phaseOffset' not in p_cfg.keys():
+            return 0
         
-        ch = _get_ch(p_cfg["gen_ch"])
+        ch = self._get_ch_idx(ch=p_cfg["gen_ch"])
+        soc_gencfg = self.soccfg['gens'][ch]
+        fclk = soc_gencfg['f_fabric']
+        samps_per_clk = soc_gencfg['samps_per_clk']
 
-        if p_cfg['style'] == "arb" or p_cfg['style'] == 'flat_top':
-            if p_cfg["waveform"] not in self._gen_mgrs[ch].pulses.keys():
+        qubit = self.cfg['qubit']
+        freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
+        phi0 = p_cfg['phaseOffset']
+
+        wf_cfg = self.cfg['waveforms'][p_cfg['waveform']]
+        length = wf_cfg['length']
+        pulse_cyc = len(self.pulses[ch][p_cfg['waveform']]['data']) / samps_per_clk
+        pad_samps = np.ceil(wf_cfg['padding'] * fclk * samps_per_clk)
+        length0 = (pulse_cyc * samps_per_clk - pad_samps) / (fclk * samps_per_clk)
+        phi0 = (phi0 - 1 * 360 * (length - length0) * freqDiff / 3) % 120
+        # print("phi0:", phi0, "phi adjust", 360 * (length - length0) * freqDiff / 3, "pulse_cyc:", pulse_cyc)
+
+        pulse_len = self.pulse_cycle(p_cfg) * self.soccfg.cycles2us(1)
+        phi1 = (freqDiff / 3 * pulse_len * 360)
+        phaseOffset = (phi0 - phi1) % 120
+        return phaseOffset
+
+    def update_pulse_phase(self, p_cfg, phase_offset=0):
+        ch = self._get_ch_idx(ch=p_cfg["gen_ch"])
+        qubit = p_cfg.get('qubit')
+        
+        pulPhaseOffset = self._pulse_phaseOffset(p_cfg)
+
+        freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
+        phaseDiff = 360 * freqDiff / 3 * self.soccfg.cycles2us(1) * self._dac_ts[ch]
+        # print("t: ", self._dac_ts[ch], 'qubit phase offset: ', self.phaseOffset_dict[qubit])
+        p_cfg['phase'] += self.phaseOffset_dict[qubit] + phaseDiff + pulPhaseOffset + phase_offset 
+        return p_cfg
+
+    def add_gate_by_config(self, p_cfg: dict, phase_offset: float=0):
+        qubit = p_cfg['qubit']
+        ch = self._get_ch_idx(ch=p_cfg["gen_ch"])
+        if p_cfg['style'] == "arb" or p_cfg['style'] == 'flat_top':  # add waveform to memory
+            if p_cfg["waveform"] not in self.pulses[ch].keys():
                 self.add_waveform_from_cfg(p_cfg["gen_ch"], p_cfg["waveform"])
-            self.set_pulse_params(**p_cfg)
         elif p_cfg['style'] == 'const':
-            self.set_pulse_params(**p_cfg)
+            pass
         else:
             raise ValueError("Not supported pulse style. Choose from 'arb', 'flat_top' or 'const'.")
+        p_cfg = self.update_pulse_phase(p_cfg, phase_offset=phase_offset)
+        self.phaseOffset_dict[qubit] += self._pulse_phaseOffset(p_cfg)
+        p_cfg = self._del_aux_params(p_cfg)
 
+        self.set_pulse_params(**p_cfg)
+        self.pulse(ch)  # add pulse to program
+    
+    def add_gate_by_name(self, pulse_name: str, phase_offset: float = 0):
+        if pulse_name not in self.qc_cfg['pulse_config'].keys():
+            raise ValueError(f'{pulse_name} is unavailable in config')
+        p_cfg = self.qc_cfg['pulse_config'][pulse_name].copy()
+        # if 'vz' not in pulse_name:
+        if pulse_name[0] != 'z':
+            self.add_gate_by_config(p_cfg, phase_offset)
+        else:
+            self.add_zgate(p_cfg['qubit'], p_cfg['phase'])
+            # self.phaseOffset_dict[p_cfg['qubit']] -= p_cfg['phase']
+
+    def add_gate_concatenate(self, gate_seq: list, seq_name: str, phase_offset: float = 0):
+        p0_cfg = self.qc_cfg['pulse_config'][gate_seq[0]].copy()
+        ch = self._get_ch_idx(p0_cfg["gen_ch"])
+        soc_gencfg = self.soccfg['gens'][ch]
+        fclk = soc_gencfg['f_fabric']
+        samps_per_clk = soc_gencfg['samps_per_clk']
+        p0_cfg['waveform'] = seq_name
+
+        p_cfg_list = []  # generate the list of pulse config
+        qubit = p0_cfg['qubit']
+        t0 = self._dac_ts[ch]
+        if seq_name not in self.pulses[ch].keys():
+            for gate in gate_seq:
+                if 'Id' in gate:
+                    pass
+                elif 'z' not in gate:
+                    p_cfg = self.qc_cfg['pulse_config'][gate].copy()
+                    # if 'phaseOffset' in p_cfg.keys():  # correct pulse phase if required
+                    #     pulPhaseOffset = self._pulse_phaseOffset(p_cfg)
+                    #     p_cfg.pop('phaseOffset')
+                    # else:
+                    #     pulPhaseOffset = 0
+                    # freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
+                    # phaseDiff = 360 * freqDiff / 3 * self.soccfg.cycles2us(1) * t0
+                    # p_cfg = self.update_pulse_phase(p_cfg, phase_offset=phaseDiff + pulPhaseOffset + phase_offset)
+                    freqDiff = self.qc_cfg['qubit_config'][qubit]['freq_ge'] - 3 * p_cfg['freq']
+                    phaseDiff = 360 * freqDiff / 3 * self.soccfg.cycles2us(1) * t0
+                    p_cfg = self.update_pulse_phase(p_cfg, phase_offset=phaseDiff + phase_offset)
+                    p_cfg.update(self.cfg['waveforms'][p_cfg['waveform']])  # add item('shape') to p_cfg
+                    p_cfg_list.append(p_cfg)
+                    self.phaseOffset_dict[qubit] += self._pulse_phaseOffset(p_cfg)
+                    t0 += self.pulse_cycle(p_cfg)
+                else:
+                    self.phaseOffset_dict[qubit] -= self.qc_cfg['pulse_config'][gate]['phase']
+            add_pulse_concatenate(self, ch, seq_name, p_cfg_list)
+            # todo: fix the gain here. the wavefroms are first concatenated and then the gain is set.
+            # The gain of each pulse should be considered duing concatenating the pulses
+
+        p0_cfg = self._del_aux_params(p0_cfg)
+        self.set_pulse_params(**p0_cfg)
         self.pulse(ch)
 
     def add_x(self, qubit: str, **kwargs):
-        self._add_gate(pulse_name=f'x_{qubit}', **kwargs)
-        pass
+        self.add_gate_by_name(pulse_name=f'x_{qubit}', **kwargs)
 
     def add_x2(self, qubit: str, **kwargs):
-        self._add_gate(pulse_name=f'x2_{qubit}', **kwargs)
-        pass
+        self.add_gate_by_name(pulse_name=f'x2_{qubit}', **kwargs)
 
     def add_y(self, qubit: str, **kwargs):
-        self._add_gate(pulse_name=f'y_{qubit}', **kwargs)
-        pass
+        self.add_gate_by_name(pulse_name=f'y_{qubit}', **kwargs)
 
     def add_y2(self, qubit: str, **kwargs):
-        self._add_gate(pulse_name=f'y2_{qubit}', **kwargs)
-        pass
+        self.add_gate_by_name(pulse_name=f'y2_{qubit}', **kwargs)
 
-    def add_zgate(self, qubit: str, **kwargs):
-        pass
+    def add_zgate(self, qubit: str, phase: float):
+        self.phaseOffset_dict[qubit] -= phase
 
     def add_iswap(self: QickProgram, q_drive_ch: str, pulse_cfg: dict=None):
         pass
