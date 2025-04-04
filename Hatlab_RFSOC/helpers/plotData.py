@@ -61,7 +61,7 @@ def plotIQHist2dLog(di_buf, dq_buf, ro_chs=None, bins=101):
     
 def plotIQHist2d(di_buf, dq_buf, ro_chs=None, bins=101, logPlot=False):
     n_ch = len(di_buf)
-    fig, axs = plt.subplots(1, n_ch, figsize=(n_ch*5, 4.5))
+    fig, axs = plt.subplots(1, n_ch, figsize=(1+n_ch*5, 4.5))
     if n_ch == 1:
         axs = [axs]
     for i in range(n_ch):
@@ -71,9 +71,11 @@ def plotIQHist2d(di_buf, dq_buf, ro_chs=None, bins=101, logPlot=False):
             ax.set_title("ADC %d"%(ro_chs[i]))
         if logPlot:
             hist, x, y = np.histogram2d(di_buf[i], dq_buf[i], bins=bins, range=[[-range_, range_],[-range_, range_]])
-            ax.pcolor(x,y,np.log(hist).T)
+            pcm = ax.pcolor(x,y,np.log(hist).T)
+            fig.colorbar(pcm, ax=ax)
         else:
-            ax.hist2d(di_buf[i], dq_buf[i], bins=bins, range=[[-range_, range_],[-range_, range_]])
+            pcm = ax.hist2d(di_buf[i], dq_buf[i], bins=bins, range=[[-range_, range_],[-range_, range_]])
+            fig.colorbar(pcm[3], ax=ax)
         ax.set_aspect(1)
         ax.set_ylabel("Q")
         ax.set_xlabel("I")
