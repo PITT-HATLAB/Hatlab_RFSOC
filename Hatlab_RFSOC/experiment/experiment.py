@@ -92,6 +92,8 @@ class Experiment():
             else:
                 ddw.add_data(avg_i=avgi, avg_q=avgq, inner_sweeps=inner_sweeps, soft_rep=soft_rep, **outer_vals)
                 return x_pts, avgi, avgq
+        else:
+            return x_pts, avgi, avgq, self.prog.di_buf_p, self.prog.dq_buf_p
 
         return x_pts, avgi, avgq, self.prog.di_buf_p, self.prog.dq_buf_p
 

@@ -88,3 +88,16 @@ def plotIQpcolormesh(xdata, ydata, idata, qdata, title=None):
     im = axs[1].pcolormesh(xdata, ydata, qdata.T, shading="auto")
     plt.colorbar(im, ax=axs[1])
 
+def plotWaveform(prog, ch: int, waveform: str, phy_unit=True, **kwargs):
+    pulse_data = prog.pulses[ch][waveform]['data']
+    f_dds = prog.soccfg['gens'][ch]['fs']
+    xdata = np.arange(len(pulse_data)) / f_dds if phy_unit else np.arange(len(pulse_data))
+    
+    plt.figure(**kwargs)
+    plt.plot(xdata, pulse_data[:, 0], label="I")
+    plt.plot(xdata, pulse_data[:, 1], label="Q")
+    plt.plot(xdata, np.abs(pulse_data[:, 0] + 1j * pulse_data[:, 1]), label="mag")
+    plt.legend()
+    plt.xlabel(f"time {'(us)' if phy_unit else '(clock cycle)'}")
+    plt.ylabel("DAC")
+
