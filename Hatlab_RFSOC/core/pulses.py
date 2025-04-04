@@ -1,4 +1,4 @@
-from typing import List, Literal, Union, Type
+from typing import List, Union, Type
 import numpy as np
 from qick.asm_v1 import QickProgram
 import matplotlib.pyplot as plt
@@ -13,6 +13,7 @@ def tanh_box(length: int, ramp_width: int, cut_offset=0.01, maxv=30000):
     :param length: Length of array (in points)
     :param ramp_width: number of points from cutOffset to 0.95 amplitude
     :param cut_offset: the initial offset to cut on the tanh Function
+    :param maxv: the max value of the waveform
     :return:
     """
     x = np.arange(0, length)
@@ -30,6 +31,7 @@ def gaussian(sigma: int, length: int, maxv=30000):
 
     :param sigma: sigma (standard deviation) of Gaussian
     :param length: total number of points of gaussian pulse
+    :param maxv: the max value of the waveform
     :return:
     """
     x = np.arange(0, length)
@@ -45,13 +47,13 @@ def tanh_box_fm(freq: float, length: int, ramp_width: int, cut_offset=0.01, maxv
 
 
 def tanh_box_IQ(freq: float, length: int, ramp_width: int, cut_offset=0.01, maxv=30000):
-    x = np.arange(0 ,length)
+    x = np.arange(0, length)
     i = tanh_box(length, ramp_width, cut_offset, maxv) * np.cos(2*np.pi * freq * x)
     q = tanh_box(length, ramp_width, cut_offset, maxv) * np.sin(2*np.pi * freq * x)
     return [i, q]
 
 
-def gaussian_fm(freq:float, sigma: int, length: int, maxv=30000):
+def gaussian_fm(freq: float, sigma: int, length: int, maxv=30000):
     x = np.arange(0, length)
     y = gaussian(sigma, length, maxv) * np.cos(2*np.pi * freq * x)
     return y
@@ -79,9 +81,9 @@ def add_padding(data, soc_gencfg, padding):
 
 
 def add_tanh(prog: QickProgram, gen_ch, name, length: float, ramp_width: float, cut_offset: float = 0.01,
-             phase: float = 0,
-             maxv=None, padding: Union[NumType, List[NumType]] = None, drag: float = 0):
-    """Adds a smooth box pulse made of two tanh functions to the waveform library, using physical parameters of the pulse.
+             phase: float = 0, maxv=None, padding: Union[NumType, List[NumType]] = None, drag: float = 0):
+    """
+    Adds a smooth box pulse made of two tanh functions to the waveform library, using physical parameters of the pulse.
     The pulse will peak at length/2.
 
     Parameters
@@ -96,6 +98,8 @@ def add_tanh(prog: QickProgram, gen_ch, name, length: float, ramp_width: float, 
         ramping time from cut_offset to 0.95 amplitude (in units of us)
     cut_offset: float
         the initial offset to cut on the tanh Function (in unit of unit-height pulse)
+    phase: float
+        the phase of the waveform in degree
     maxv : float
         Value at the peak (if None, the max value for this generator will be used)
     padding: float | List[float]
@@ -105,7 +109,8 @@ def add_tanh(prog: QickProgram, gen_ch, name, length: float, ramp_width: float, 
 
     gen_ch = prog.cfg["gen_chs"][gen_ch]["ch"]
     soc_gencfg = prog.soccfg['gens'][gen_ch]
-    if maxv is None: maxv = soc_gencfg['maxv'] * soc_gencfg['maxv_scale']
+    if maxv is None:
+        maxv = soc_gencfg['maxv'] * soc_gencfg['maxv_scale']
     samps_per_clk = soc_gencfg['samps_per_clk']
     fclk = soc_gencfg['f_fabric']
 
@@ -136,7 +141,7 @@ def add_gaussian(prog: QickProgram, gen_ch: str, name, sigma: float, length: flo
 
     Parameters
     ----------
-    ch : str
+    gen_ch : str
         name of the generator channel
     name : str
         Name of the pulse
@@ -151,7 +156,8 @@ def add_gaussian(prog: QickProgram, gen_ch: str, name, sigma: float, length: flo
 
     gen_ch = prog.cfg["gen_chs"][gen_ch]["ch"]
     soc_gencfg = prog.soccfg['gens'][gen_ch]
-    if maxv is None: maxv = soc_gencfg['maxv'] * soc_gencfg['maxv_scale']
+    if maxv is None:
+        maxv = soc_gencfg['maxv'] * soc_gencfg['maxv_scale']
     samps_per_clk = soc_gencfg['samps_per_clk']
     fclk = soc_gencfg['f_fabric']
 
@@ -175,13 +181,13 @@ def add_gaussian(prog: QickProgram, gen_ch: str, name, sigma: float, length: flo
 
 
 def add_arbitrary(prog: QickProgram, gen_ch: str, name, envelope, phase: float = 0,
-                 maxv=None, padding: Union[NumType, List[NumType]] = None, drag: float = 0):
+                  maxv=None, padding: Union[NumType, List[NumType]] = None, drag: float = 0):
     """Adds an arbitrary pulse to the waveform library, using physical parameters of the pulse.
     The pulse will peak at length/2.
 
     Parameters
     ----------
-    ch : str
+    gen_ch : str
         name of the generator channel
     name : str
         Name of the pulse
@@ -202,8 +208,8 @@ def add_arbitrary(prog: QickProgram, gen_ch: str, name, envelope, phase: float =
     wf_padded = np.concatenate((wf, zero_padding))
     drag_padded = -np.gradient(wf_padded) * drag
 
-    wf_idata = np.cos(np.pi / 180 * phase) * wf_padded
-    wf_qdata = np.sin(np.pi / 180 * phase) * wf_padded
+    wf_idata = np.cos(np.pi / 180 * phase) * drag_padded
+    wf_qdata = np.sin(np.pi / 180 * phase) * drag_padded
 
     # prog.add_pulse(gen_ch, name, idata=wf_padded)
     prog.add_pulse(gen_ch, name, idata=wf_idata, qdata=wf_qdata)
@@ -217,7 +223,8 @@ def add_pulse_concatenate(prog: QickProgram, gen_ch: str | int, name, gatelist, 
         return gmax
     gen_ch = prog.cfg["gen_chs"][gen_ch]["ch"] if type(gen_ch) == str else gen_ch
     soc_gencfg = prog.soccfg['gens'][gen_ch]
-    if maxv is None: maxv = soc_gencfg['maxv'] * soc_gencfg['maxv_scale']
+    if maxv is None:
+        maxv = soc_gencfg['maxv'] * soc_gencfg['maxv_scale']
     samps_per_clk = soc_gencfg['samps_per_clk']
     fclk = soc_gencfg['f_fabric']
 
@@ -281,13 +288,15 @@ class Waveform:
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         WaveformRegistry.register(cls.__name__, cls)
+
     def __init__(self, prog: QickProgram, gen_ch: Union[int, str], phase, maxv):
         self.maxv = maxv
         self.phase = phase
+        self.waveform = None
         self._set_channel_cfg(prog, gen_ch)
 
     @staticmethod
-    def core() -> np.ndarray:
+    def core(*args, **kwargs) -> np.ndarray:
         pass
 
     def _generate_waveform(self, *args, **kwargs):
@@ -307,10 +316,11 @@ class Waveform:
         soc_gencfg = prog.soccfg['gens'][gen_ch]
         self.samps_per_clk = soc_gencfg['samps_per_clk']
         self.fclk = soc_gencfg['f_fabric']
+        self.sampling_rate = self.samps_per_clk * self.fclk
 
-    def us_to_samps(self, length: float) -> float:
+    def us_to_samps(self, length):
         """Convert length in physical units to register units."""
-        return length * self.fclk * self.samps_per_clk
+        return length * self.sampling_rate
 
     def _pad_waveform(self, waveform: np.ndarray) -> np.ndarray:
         """Pads waveform to be a multiple of samps_per_clk."""
@@ -345,59 +355,58 @@ class Waveform:
 
 
 class DragModulationMixin:
-    def _drag_func(self, waveform, drag_coeff=0):
+    @staticmethod
+    def _drag_func(waveform, drag_coeff: float = 0, sampling_rate=1):
         """drag correction for resonant driving"""
-        dt = 1 / (self.fclk * self.samps_per_clk)
-        return -drag_coeff * np.exp(1j * np.pi/2) * np.gradient(waveform) / dt
+        dt = 1/sampling_rate
+        return -drag_coeff * np.exp(1j * np.pi/2) * np.gradient(waveform, dt)
 
-    def apply_drag_modulation(self, waveform, drag_func=None, drag_coeff=0):
+    def apply_drag_modulation(self, waveform, drag_func=None, drag_coeff: float = 0, sampling_rate=1):
         """
         Apply a drag modulation to the input waveform.
 
         Parameters:
         - waveform: Input waveform array.
-        - drag_func: A callable accepting (waveform, drag_coeff) that returns the drag correction.
+        - drag_func: A callable accepting (waveform, drag_coeff, sampling_rate) that returns the drag correction.
         - drag_coeff: A coefficient for the drag correction amplitude
         """
         if drag_func is None:
             drag_func = self._drag_func
-        wf_drag = drag_func(waveform, drag_coeff)
+        wf_drag = drag_func(waveform, drag_coeff, sampling_rate)
         return waveform + wf_drag
 
 
 class ChirpModulationMixin:
-    def _instant_frequency(self, chirp_func, waveform, maxf, maxv):
+    @staticmethod
+    def _instant_frequency(chirp_func, waveform, maxf, maxv):
         return chirp_func(np.abs(waveform), maxf, maxv)
 
-    def _chrip_phase(self, instant_freq):
-        fsamps = self.fclk * self.samps_per_clk
+    @staticmethod
+    def _chirp_phase(instant_freq, sampling_rate):
         phase = np.zeros(len(instant_freq))
         phi0 = 0
         for i in range(len(instant_freq) - 1):
             phase[i] = phi0
-            phi0 += np.pi * (instant_freq[i] + instant_freq[i + 1]) / fsamps
+            phi0 += np.pi * (instant_freq[i] + instant_freq[i + 1]) / sampling_rate
         phase[-1] = phi0
         return phase
 
-    def apply_chirp_modulation(self, waveform, chirp_func, maxf=0, maxv=30000):
+    def apply_chirp_modulation(self, waveform, chirp_func, sampling_rate, maxf=0, maxv=30000):
         """
         Apply a chirp modulation to the input waveform.
 
         Parameters:
         - waveform: Input waveform array.
         - chirp_func: A callable accepting (amp, maxf, maxv) that returns the chirp frequency at the given amplitude.
+        - sampling_rate: sampling_rate of the waveform
         - maxf: Maximum chirp instanteous frequency in MHz. Default value is 0
         - maxv: Maximum amplitude of the given waveform. Default value is 30000
         """
         chirp_freq = self._instant_frequency(chirp_func, waveform, maxf, maxv)
-        chirp_phase = self._chrip_phase(chirp_freq)
-        wf_chrip = waveform * np.exp(1j * chirp_phase)
+        chirp_phase = self._chirp_phase(chirp_freq, sampling_rate)
+        wf_chirp = waveform * np.exp(1j * chirp_phase)
 
-        # wf_i = waveform * np.cos(chirp_phase)
-        # wf_q = waveform * np.sin(chirp_phase)
-        # wf_idata = np.cos(phase_rad) * wf_i - np.sin(phase_rad) * wf_q
-        # wf_qdata = np.sin(phase_rad) * wf_i + np.cos(phase_rad) * wf_q
-        return wf_chrip
+        return wf_chirp
 
 
 class WaveformCorrectionMixin:
@@ -440,10 +449,10 @@ class WaveformCorrectionMixin:
         Modify a waveform in the frequency domain and return the modified time-domain waveform.
 
         Parameters:
-            signal (np.array): Input time-domain signal (can be complex or real).
-            sampling_rate (float): Sampling rate of the signal in Hz.
-            modification_func (callable): A function that takes (fft_freq, fft_values) as inputs
+            - signal (np.array): Input time-domain signal (can be complex or real).
+            - calibration_func (callable): A function that takes (fft_freq, fft_values) as inputs
                                           and returns modified fft_values.
+            - sampling_rate (float): Sampling rate of the signal in Hz.
 
         Returns:
             np.array: The modified time-domain signal (complex if the input was complex).
@@ -531,12 +540,13 @@ class Gaussian(Waveform, DragModulationMixin):
         waveform = self.maxv * self.core(*args, **kwargs)
         waveform_padded = self._apply_padding(waveform, self.padding)
         waveform_wphase = np.exp(1j * np.deg2rad(self.phase)) * waveform_padded
-        waveform_dragged = self.apply_drag_modulation(waveform_wphase, drag_coeff=self.drag_coeff)
-        return waveform_dragged
+        waveform_drag = self.apply_drag_modulation(waveform_wphase, drag_coeff=self.drag_coeff,
+                                                   sampling_rate=self.sampling_rate)
+        return waveform_drag
 
 
 class TanhBox(Waveform, DragModulationMixin):
-    def __init__(self, prog, gen_ch, length, ramp_width, cut_offset=0.01, phase=0, maxv=30000, drag_coeff=0,
+    def __init__(self, prog, gen_ch, length, ramp_width, cut_offset=0.01, phase=0, maxv=30000, drag_coeff=0.0,
                  padding: Union[float, List[float], None] = None):
         super().__init__(prog, gen_ch, phase=phase, maxv=maxv)
         self.ramp_samps = self.us_to_samps(ramp_width)
@@ -569,8 +579,9 @@ class TanhBox(Waveform, DragModulationMixin):
         waveform = self.maxv * self.core(*args, **kwargs)
         waveform_padded = self._apply_padding(waveform, self.padding)
         waveform_wphase = np.exp(1j * np.deg2rad(self.phase)) * waveform_padded
-        waveform_dragged = self.apply_drag_modulation(waveform_wphase, drag_coeff=self.drag_coeff)
-        return waveform_dragged
+        waveform_drag = self.apply_drag_modulation(waveform_wphase, drag_coeff=self.drag_coeff,
+                                                   sampling_rate=self.sampling_rate)
+        return waveform_drag
 
 
 class FileDefined(Waveform, DragModulationMixin):
@@ -621,7 +632,7 @@ class GaussianChirped(Gaussian, ChirpModulationMixin):
 
     def _generate_waveform(self, *args, **kwargs):
         waveform = super()._generate_waveform(*args, **kwargs)
-        waveform_chirped = self.apply_chirp_modulation(waveform, self.chirp_func, self.maxf, self.maxv)
+        waveform_chirped = self.apply_chirp_modulation(waveform, self.chirp_func, self.sampling_rate, self.maxf, self.maxv)
         return waveform_chirped
 
 
@@ -634,7 +645,7 @@ class TanhBoxChirped(TanhBox, ChirpModulationMixin):
 
     def _generate_waveform(self, *args, **kwargs):
         waveform = super()._generate_waveform(*args, **kwargs)
-        waveform_chirped = self.apply_chirp_modulation(waveform, self.chirp_func, self.maxf, self.maxv)
+        waveform_chirped = self.apply_chirp_modulation(waveform, self.chirp_func, self.sampling_rate, self.maxf, self.maxv)
         return waveform_chirped
 
 
@@ -668,10 +679,10 @@ if __name__ == "__main__":
     # wf = TanhBox(prog, 0, length=0.05, ramp_width=0.01, phase=0, drag_coeff=0.003183, padding=[0.015, 0.015])
 
     # --------------------- generate chriped waveforms ----------------------------------------------------
-    def chirp_func(amp, maxf, maxv):
+    def cfunc(amp, maxf, maxv):
         return maxf * (amp/maxv)**2
     wf = TanhBoxChirped(prog=prog, gen_ch=0, length=0.05, ramp_width=0.01, phase=0, drag_coeff=0.003183,
-                        chirp_func=chirp_func, maxf=-50, padding=[0.03, 0.03])
+                        chirp_func=cfunc, maxf=-50, padding=[0.03, 0.03])
 
     wf.plot_waveform()
     wf.add_waveform(prog, "pulseTest")
