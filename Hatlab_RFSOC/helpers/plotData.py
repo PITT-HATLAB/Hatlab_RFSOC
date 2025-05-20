@@ -58,10 +58,10 @@ def plotIQHist2dLog(di_buf, dq_buf, ro_chs=None, bins=101):
         ax.set_aspect(1)
         ax.set_ylabel("Q")
         ax.set_xlabel("I")
-    
+
 def plotIQHist2d(di_buf, dq_buf, ro_chs=None, bins=101, logPlot=False):
     n_ch = len(di_buf)
-    fig, axs = plt.subplots(1, n_ch, figsize=(n_ch*5, 4.5))
+    fig, axs = plt.subplots(1, n_ch, figsize=(1+n_ch*5, 4.5))
     if n_ch == 1:
         axs = [axs]
     for i in range(n_ch):
@@ -71,15 +71,17 @@ def plotIQHist2d(di_buf, dq_buf, ro_chs=None, bins=101, logPlot=False):
             ax.set_title("ADC %d"%(ro_chs[i]))
         if logPlot:
             hist, x, y = np.histogram2d(di_buf[i], dq_buf[i], bins=bins, range=[[-range_, range_],[-range_, range_]])
-            ax.pcolor(x,y,np.log(hist))
+            pcm = ax.pcolor(x,y,np.log(hist).T)
+            fig.colorbar(pcm, ax=ax)
         else:
-            ax.hist2d(di_buf[i], dq_buf[i], bins=bins, range=[[-range_, range_],[-range_, range_]])
+            pcm = ax.hist2d(di_buf[i], dq_buf[i], bins=bins, range=[[-range_, range_],[-range_, range_]])
+            fig.colorbar(pcm[3], ax=ax)
         ax.set_aspect(1)
         ax.set_ylabel("Q")
         ax.set_xlabel("I")
 
     plt.tight_layout()
-    
+
 def plotIQpcolormesh(xdata, ydata, idata, qdata, title=None):
     fig, axs = plt.subplots(1,2,figsize=(8,5))
     fig.suptitle(title)
@@ -88,16 +90,39 @@ def plotIQpcolormesh(xdata, ydata, idata, qdata, title=None):
     im = axs[1].pcolormesh(xdata, ydata, qdata.T, shading="auto")
     plt.colorbar(im, ax=axs[1])
 
-def plotWaveform(prog, ch: int, waveform: str, phy_unit=True, **kwargs):
-    pulse_data = prog.pulses[ch][waveform]['data']
+
+def plotWaveform(prog, ch: int, waveform: str, phy_unit=True, polar=False, **kwargs):
+    """
+    plot the waveform stored in a dac channel
+    :param prog: qickprogram
+    :param ch: the waveform channe;
+    :param waveform: the name of the waveform
+    :param phy_unit: time is in us if True, clock cycle if False
+    :param polar: plot iq data in a polar plot
+    :param kwargs: kwargs for plt.figure()
+    :return: time data and waveform data
+    """
+    pulse_data = prog.envelopes[ch]["envs"][waveform]['data']
     f_dds = prog.soccfg['gens'][ch]['fs']
     xdata = np.arange(len(pulse_data)) / f_dds if phy_unit else np.arange(len(pulse_data))
-    
-    plt.figure(**kwargs)
-    plt.plot(xdata, pulse_data[:, 0], label="I")
-    plt.plot(xdata, pulse_data[:, 1], label="Q")
-    plt.plot(xdata, np.abs(pulse_data[:, 0] + 1j * pulse_data[:, 1]), label="mag")
-    plt.legend()
-    plt.xlabel(f"time {'(us)' if phy_unit else '(clock cycle)'}")
-    plt.ylabel("DAC")
+
+    if polar:
+        r_ = np.max(np.abs(pulse_data[:, 0] + 1j * pulse_data[:, 1]))
+        plt.figure(figsize=(5, 5), **kwargs)
+        plt.plot(pulse_data[:, 0], pulse_data[:, 1])
+        plt.xlim((1.1*-r_, 1.1*r_))
+        plt.ylim((1.1*-r_, 1.1*r_))
+        plt.xlabel("I")
+        plt.xlabel("Q")
+
+    else:
+        plt.figure(**kwargs)
+        plt.plot(xdata, pulse_data[:, 0], label="I")
+        plt.plot(xdata, pulse_data[:, 1], label="Q")
+        plt.plot(xdata, np.abs(pulse_data[:, 0] + 1j * pulse_data[:, 1]), label="mag")
+        plt.legend()
+        plt.xlabel(f"time {'(us)' if phy_unit else '(clock cycle)'}")
+        plt.ylabel("DAC")
+
+    return xdata, pulse_data
 

@@ -8,7 +8,7 @@ import yaml
 from plottr.data.datadict import DataDict, DataDictBase
 from plottr.data.datadict_storage import set_attr as dd_set_attr
 from Hatlab_DataProcessing.data_saving import datadict_from_hdf5, HatDDH5Writer
-
+from Hatlab_RFSOC.helpers.yaml_editor import to_yaml_friendly
 
 def add_axis_meta(dd:Union[DataDictBase, Dict], ax_name: str, ax_value):
     """
@@ -162,8 +162,13 @@ class QickDataDict(DataDict):
         add_axis_meta(self, "reps", np.arange(reps))
 
         # add qick inner sweep data
-        for k, v in flatten_inner.items():
-            new_data[k] = np.tile(np.repeat(v, msmt_per_exp), reps)
+        # for k, v in flatten_inner.items():
+        #     new_data[k] = np.tile(np.repeat(v, msmt_per_exp), reps)
+
+        for ki, vi in flatten_inner.items():
+            new_data[ki] = np.tile(np.repeat(vi, msmt_per_exp), reps)
+            for ko, vo in outer_sweeps.items():
+                new_data[ki] = np.tile(new_data[ki], len(vo))
 
         # add outer sweep data
         for k, v in outer_sweeps.items():
@@ -358,6 +363,51 @@ class DataFromQDDH5:
             _new_axes[k] = self.axes[k]
         self.axes = _new_axes
 
+
+def save_state_pct(filepath, filename, state_pct, **sweep_params):
+    data = {"state_pct": {"unit": "a.u."}}
+    for k in sweep_params.keys():
+        data[k] = {"axes": []}
+    data["state_pct"]["axes"] = list(sweep_params.keys())
+
+    dd = DataDict(**data)
+    ddw = HatDDH5Writer(dd, filepath, filename=filename)
+    with ddw as dw:
+        dw.add_data(state_pct=state_pct, **sweep_params)
+
+
+def save_data_raw(filepath, filename, avg_i, avg_q, buf_i=None, buf_q=None, config=None, info=None,
+                  inner_sweeps: Union[DataDictBase, Dict] = None, outer_sweeps: Union[DataDictBase, Dict] = None):
+    """
+    simply saves iq data points acquired from qick averager programs. Unlike the more complete data saving methods in
+    "Experiment" class, here we only save the qick inner sweep axes without units.
+    :param filepath: data file directory
+    :param filename: data file name
+    :param avg_i: avg_i data from qick averager programs
+    :param avg_q: avg_q data from qick averager programs
+    :param buf_i: buf_i data from qick averager programs
+    :param buf_q: buf_q data from qick averager programs
+    :param config: config dict
+    :param inner_sweep: DataDictBase or dict of qick sweep parameters
+    :param outer_sweep: var of outer sweep parameters
+    :return:
+    """
+    qdd = QickDataDict(config["ro_chs"], inner_sweeps, outer_sweeps)
+    ddw = HatDDH5Writer(qdd, filepath, filename=filename)
+    with ddw as dw:
+        if config is not None:
+            dw.save_config(to_yaml_friendly({"config": config, "info": info}))
+        avg_i, avg_q = np.asarray(avg_i), np.asarray(avg_q)
+        buf_i, buf_q = np.asarray(buf_i), np.asarray(buf_q)
+        if outer_sweeps is not None:
+            outer_dict = outer_sweeps.to_dict()
+            avg_i = np.moveaxis(avg_i, len(outer_dict), 0)
+            avg_q = np.moveaxis(avg_q, len(outer_dict), 0)
+            buf_i = np.moveaxis(buf_i, len(outer_dict), 0)
+            buf_q = np.moveaxis(buf_q, len(outer_dict), 0)
+            dw.add_data(inner_sweeps=inner_sweeps, avg_i=avg_i, avg_q=avg_q, buf_i=buf_i, buf_q=buf_q, **outer_dict)
+        else:
+            dw.add_data(inner_sweeps=inner_sweeps, avg_i=avg_i, avg_q=avg_q, buf_i=buf_i, buf_q=buf_q)
 
 
 if __name__ == "__main__":
