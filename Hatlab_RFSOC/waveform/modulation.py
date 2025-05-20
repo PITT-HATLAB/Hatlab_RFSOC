@@ -212,6 +212,7 @@ class WaveformCorrection:
             S21 = self.calibration_data[1]
             S21_interpolate = CubicSpline(freq_MHz, S21 + attenuation)
             interpolation = CubicSpline(freq_MHz, + S21_interpolate(freq_ref)/S21)
+
         def calib_func(val):
             f_min = np.min(freq_MHz)
             f_max = np.max(freq_MHz)

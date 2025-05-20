@@ -2,7 +2,6 @@ import warnings
 from typing import List, Union, Type, Callable
 import numpy as np
 from qick.asm_v1 import QickProgram
-import matplotlib.pyplot as plt
 
 NumType = Union[int, float]
 
@@ -1013,81 +1012,5 @@ class ChirpModulationMixin:
 
 
 if __name__ == "__main__":
-    from Hatlab_RFSOC.core.averager_program import NDAveragerProgram, QubitMsmtMixin
-    from Hatlab_RFSOC.proxy import getSocProxy
-    import yaml
-
-    # --------------------- initialize a qick program ----------------------------------------------
-    def get_cfg_info(cfgFilePath):
-        yml = yaml.safe_load(open(cfgFilePath))
-        config, info = yml["config"], yml["info"]
-        return config, info
-
-    class Program(QubitMsmtMixin, NDAveragerProgram):
-        def initialize(self):
-            self.sync_all(self.us2cycles(1))  # give processor some time to configure pulses
-
-        def body(self):
-            pass
-
-    cfgFilePath = r"W:\code\SubHarmonic_20250307\RFSOC_phaseReset\config_files\20250307_SubHarmonic_Q1_amp_bigenv2.yml"
-    config, info = get_cfg_info(cfgFilePath)
-    soc, soccfg = getSocProxy(info["PyroServer"])
-    expt_cfg = {"reps":  1, "relax_delay": 20}
-    config.update(expt_cfg)
-    prog = Program(soccfg, config)
-
-    # --------------------- generate waveforms ----------------------------------------------------
-    # wf = Gaussian(prog, 0, length=0.05, sigma=0.01, phase=0, padding=[0.05, 0.05])
-    wf = TanhBox(prog, 0, length=0.1, ramp_width=0.01, phase=0, padding=[0.015, 0.015])
-    wf.plot_waveform()
-
-    # --------------------- generate modulated waveforms ----------------------------------------------------
-
-    # define modulations
-    def cfunc(amp, maxf, maxv):
-        return maxf * (amp/maxv)**2
-    cm = ChirpModulation(chirp_func=cfunc, maxf=-50, maxv=30000)
-    dm = DragModulation(0.003)
-
-    wf2 = GaussianModulated(prog=prog, gen_ch=0, length=0.05, sigma=0.01, phase=0, padding=[0.015, 0.015],
-                            modulations=[dm, cm], shape="GaussianChirpDrag")
-    wf2 = TanhBoxModulated(prog=prog, gen_ch=0, length=0.05, ramp_width=0.01, phase=0, padding=[0.015, 0.015],
-                           modulations=[dm, cm], shape="TanhboxChirpDrag")
-    wf2.plot_waveform()
-
-    wfc = ConcatenateWaveform(prog=prog, gen_ch=0, waveforms=[wf, wf2], phase=0, shape="concatenated_pulse_1")
-    wfc.plot_waveform()
-
-    # corrFile = r"W:\data\SubHarmonic\WileE_20250307\rfsoc_calibration\\" \
-    #            r"zcu216-04-Ch1-BLN14_500.0_2000.0MHz_5000DAC_peak_vlfg1525_vlfg1525_RT_20250312.csv"
-    # wcorr = WaveformCorrection(filepath=corrFile, freq=1200, scale="dbm")
-    corrFile = r"W:\data\SubHarmonic\WileE_20250326\Q1\qubitMSMT\EtaCalibrationWithStarkShift\2025-04-14\\" \
-               r"Q1_DAC0_Line1_Subh1000-1300MHz_5000DAC_Q3700-3720MHz_8000DAC-2_eta_smoothed.csv"
-    wcorr = WaveformCorrection(filepath=corrFile, freq=1100, scale="linear", max_scale=0.5)
-    wfcorr = TanhBoxModulated(prog=prog, gen_ch=0, length=0.1, ramp_width=0.01, phase=0, padding=[0.015, 0.015],
-                           modulations=[cm, wcorr], shape="TanhboxCorrected")
-    wfcorr = GaussianModulated(prog=prog, gen_ch=0, length=0.1, sigma=0.02, phase=0, padding=[0.015, 0.015],
-                           modulations=[wcorr], shape="GaussianCorrected")
-    wfcorr.plot_waveform()
-    plt.ylim((-30000, 33000))
-
-    wf_fft = wcorr.compute_fourier_transform(wfcorr.waveform, wfcorr.sampling_rate)
-    plt.figure()
-    plt.plot(wf_fft[0], wf_fft[1])
-
-    t_list = np.linspace(0, (len(wf.waveform) - 1) / wf.sampling_rate, len(wf.waveform))
-    signal = wf.waveform
-    signal_wc = wcorr.apply_modulation(signal, wf.sampling_rate)
-    signal_recv = wcorr.recover_modulation(signal_wc, wf.sampling_rate)
-
-    plt.figure()
-    plt.plot(t_list, np.abs(signal), label="original")
-    plt.plot(t_list, np.abs(signal_wc), label="corrected")
-    plt.plot(t_list, np.abs(signal_recv), label="undo")
-    plt.legend()
-
-
-    # pulse = WaveformRegistry.create("test_concatenated_pulse", prog=prog, gen_ch=0, waveforms=[wf, wf2], phase=0)
-    # pulse.plot_waveform()
+    pass
 

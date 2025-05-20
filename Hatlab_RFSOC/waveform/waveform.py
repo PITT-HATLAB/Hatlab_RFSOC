@@ -384,9 +384,6 @@ if __name__ == "__main__":
     wfc = ConcatenateWaveform(prog=prog, gen_ch=0, waveforms=[wf, wf2], phase=0, shape="concatenated_pulse_1")
     wfc.plot_waveform()
 
-    # corrFile = r"W:\data\SubHarmonic\WileE_20250307\rfsoc_calibration\\" \
-    #            r"zcu216-04-Ch1-BLN14_500.0_2000.0MHz_5000DAC_peak_vlfg1525_vlfg1525_RT_20250312.csv"
-    # wcorr = WaveformCorrection(filepath=corrFile, freq=1200, scale="dbm")
     corrFile = r"W:\data\SubHarmonic\WileE_20250326\Q1\calibration\\" \
                r"Q1_DAC0_Line1_Subh1000-1300MHz_5000DAC_Q3700-3720MHz_8000DAC-2_epsilon_smoothed(2).csv"
     wcorr = modulation.WaveformCorrection(filepath=corrFile, freq=1100, scale="linear", max_scale=0.5)
