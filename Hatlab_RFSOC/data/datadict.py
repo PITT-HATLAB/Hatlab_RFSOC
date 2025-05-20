@@ -391,12 +391,17 @@ def save_data_raw(filepath, filename, avg_i, avg_q, buf_i=None, buf_q=None, conf
     """
     qdd = QickDataDict(config["ro_chs"], inner_sweeps, outer_sweeps)
     ddw = HatDDH5Writer(qdd, filepath, filename=filename)
-
     with ddw as dw:
         if config is not None:
             dw.save_config(to_yaml_friendly({"config": config, "info": info}))
+        avg_i, avg_q = np.asarray(avg_i), np.asarray(avg_q)
+        buf_i, buf_q = np.asarray(buf_i), np.asarray(buf_q)
         if outer_sweeps is not None:
             outer_dict = outer_sweeps.to_dict()
+            avg_i = np.moveaxis(avg_i, len(outer_dict), 0)
+            avg_q = np.moveaxis(avg_q, len(outer_dict), 0)
+            buf_i = np.moveaxis(buf_i, len(outer_dict), 0)
+            buf_q = np.moveaxis(buf_q, len(outer_dict), 0)
             dw.add_data(inner_sweeps=inner_sweeps, avg_i=avg_i, avg_q=avg_q, buf_i=buf_i, buf_q=buf_q, **outer_dict)
         else:
             dw.add_data(inner_sweeps=inner_sweeps, avg_i=avg_i, avg_q=avg_q, buf_i=buf_i, buf_q=buf_q)
