@@ -1,6 +1,6 @@
 from typing import Dict, List, Union, Callable, Type
 
-from qick.qick_asm import QickProgram
+from qick.asm_v1 import QickProgram
 
 from Hatlab_RFSOC.proxy import getSocProxy
 from Hatlab_RFSOC.data import QickDataDict
