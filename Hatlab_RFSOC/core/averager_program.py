@@ -8,10 +8,14 @@ from qick.qick_asm import AcquireMixin
 from qick.asm_v1 import QickProgram, FullSpeedGenManager, QickRegister, QickRegisterManagerMixin
 from qick.averager_program import AbsQickSweep, QickSweep, NDAveragerProgram
 
+from Hatlab_RFSOC.core import pulses
+from Hatlab_RFSOC.waveform import waveform, modulation
 from .pulses import add_gaussian, add_tanh, add_pulse_concatenate, add_arbitrary
-from C004_Chirp_modulation import ChirpModulationMixin as CM
+from .pulses import ChirpModulationMixin as CM
+from Hatlab_RFSOC.waveform.waveform import add_waveform, add_waveform_concatenate
 
 RegisterTypes = Literal["freq", "time", "phase", "adc_freq"]
+
 
 class FlatTopLengthSweep(QickSweep):
     """
@@ -272,6 +276,42 @@ class APAveragerProgram(QickRegisterManagerMixin, AcquireMixin, QickProgram):
         kw_reg = self.pulse_param_to_reg(gen_cfg["ch"], gen_cfg.get("ro_ch"), **kwargs)
         self.set_pulse_registers(gen_cfg["ch"], **kw_reg)
 
+    # def add_waveform(self, gen_ch, name, shape, **kwargs):
+    #     """
+    #     Add waveform to a generator channel based on parameters specified in cfg["waveforms"]
+    #
+    #     :param gen_ch: name of the generator channel, as in cfg["gen_chs"]
+    #     :param name: name of the waveform.
+    #     :param shape: shape of the waveform, should be one of the waveforms that are available in pulses.py
+    #     :param kwargs: kwargs for the pulse
+    #
+    #     :return:
+    #     """
+    #
+    #     # todo: the parser can be better... instead of using if commands to select from only two possible waveforms here
+    #     #   We should have a abstract waveform class, each new waveform should be written as a waveform class instance,
+    #     #   and the parser should search for waveform in pulses.py (rename that to waveforms.py)
+    #
+    #     if shape == "gaussian":
+    #         add_gaussian(self, gen_ch, name, **kwargs)
+    #     elif shape == "tanh_box":
+    #         add_tanh(self, gen_ch, name, **kwargs)
+    #     elif shape == "from_file":
+    #         add_arbitrary(self, gen_ch, name, **kwargs)
+    #     else:
+    #         raise NameError(f"unsupported pulse shape {shape}")
+    #
+    # def add_waveform_from_cfg(self, gen_ch: str, name: str):
+    #     """
+    #     Add waveform to a generator channel based on parameters specified in cfg["waveforms"]
+    #
+    #     :param gen_ch: name of the generator channel, as in cfg["gen_chs"]
+    #     :param name: name of the waveform, as in cfg["waveforms"]
+    #     :return:
+    #     """
+    #     pulse_params = self.cfg["waveforms"][name]
+    #     self.add_waveform(gen_ch, name, **pulse_params)
+
     def add_waveform(self, gen_ch, name, shape, **kwargs):
         """
         Add waveform to a generator channel based on parameters specified in cfg["waveforms"]
@@ -283,19 +323,7 @@ class APAveragerProgram(QickRegisterManagerMixin, AcquireMixin, QickProgram):
 
         :return:
         """
-
-        # todo: the parser can be better... instead of using if commands to select from only two possible waveforms here
-        #   We should have a abstract waveform class, each new waveform should be written as a waveform class instance,
-        #   and the parser should search for waveform in pulses.py (rename that to waveforms.py)
-
-        if shape == "gaussian":
-            add_gaussian(self, gen_ch, name, **kwargs)
-        elif shape == "tanh_box":
-            add_tanh(self, gen_ch, name, **kwargs)
-        elif shape == "from_file":
-            add_arbitrary(self, gen_ch, name, **kwargs)
-        else:
-            raise NameError(f"unsupported pulse shape {shape}")
+        add_waveform(self, gen_ch, name, shape, **kwargs)
 
     def add_waveform_from_cfg(self, gen_ch: str, name: str):
         """
@@ -886,7 +914,7 @@ class QCAveragerProgram(NDAveragerProgram):
 
 
 class QubitMsmtMixin:
-    def set_pulse_params_IQ(self: QickProgram, gen_ch:str, skew_phase, IQ_scale, **kwargs):
+    def set_pulse_params_IQ(self: QickProgram, gen_ch: str, skew_phase, IQ_scale, **kwargs):
         """ set the pulse register for two DAC channels that are going to be sent to a IQ mixer.
         :param self: qick program for which the pulses will be added
         :param gen_ch: IQ generator channel name
@@ -908,7 +936,7 @@ class QubitMsmtMixin:
         self.set_pulse_registers(ch=ch_I, **I_regs)
         self.set_pulse_registers(ch=ch_Q, **Q_regs)
 
-    def set_pulse_params_auto_gen_type(self:QickProgram, gen_ch:str, **pulse_args):
+    def set_pulse_params_auto_gen_type(self: QickProgram, gen_ch: str, **pulse_args):
         """
         set pulse params based on the generator type. feed "skew_phase" and "IQ_scale" for IQ channels; auto add mask
         for muxed channels
@@ -927,8 +955,7 @@ class QubitMsmtMixin:
                 pulse_args["mask"] = [0, 1, 2, 3]
             self.set_pulse_params(gen_ch, **pulse_args)
 
-
-    def add_prepare_msmt(self:QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
+    def add_prepare_msmt(self: QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
                          prepare_q_gain: int = None, adcs=None):
         """
         add a state preparation measurement to the qick asm program.
@@ -946,10 +973,9 @@ class QubitMsmtMixin:
             prepare_q_gain = int(q_pulse_cfg["pi2_gain"] * 0.75)
             
         q_pulse_cfg_ = dict(style="arb", waveform=q_pulse_cfg["waveform"],
-                              phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
+                            phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
 
         self.add_prepare_msmt_general(q_drive_ch, q_pulse_cfg_, res_ch, syncdelay, adcs)
-
 
     def add_efprepare_msmt(self: QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
                          prepare_q_gain: int = None, adcs=None):
@@ -963,27 +989,29 @@ class QubitMsmtMixin:
         :param res_ch: Resonator drive channel name
         :param syncdelay: time to wait after msmt, in us
         :param prepare_q_gain: q drive gain for the prepare pulse
+        :param adcs: readout channels
         :return:
         """
         if prepare_q_gain is None:
             prepare_q_gain = int(q_pulse_cfg["pi2_gain"])
 
-        q_pulse_cfg_ = dict(style="arb", waveform=q_pulse_cfg["waveform"],
-                            phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
-        self.set_pulse_params(q_drive_ch, style='arb', waveform=q_pulse_cfg['waveform'],
-                              phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg['ge_freq'], gain=q_pulse_cfg['pi_gain'])
-        self.pulse(ch=self.cfg['gen_chs'][q_drive_ch]['ch']) #play ge pi
+        q_pulse_cfg_ = dict(style="arb", waveform=q_pulse_cfg["waveform"], freq=q_pulse_cfg["ge_freq"],
+                            phase=q_pulse_cfg.get("phase", 0), gain=prepare_q_gain)
+
+        self.set_pulse_params(q_drive_ch, style='arb', waveform=q_pulse_cfg['waveform'], freq=q_pulse_cfg['ge_freq'],
+                              phase=q_pulse_cfg.get("phase", 0), gain=q_pulse_cfg['pi_gain'])
+        self.pulse(ch=self.cfg['gen_chs'][q_drive_ch]['ch'])  # play ge pi
         self.sync_all(self.us2cycles(0.01))
-        self.set_pulse_params(q_drive_ch, style='arb', waveform=q_pulse_cfg['waveform'],
-                              phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg['ef_freq'], gain=int(q_pulse_cfg['ef_pi2_gain']*0.5))
-        self.pulse(ch=self.cfg['gen_chs'][q_drive_ch]['ch']) #play ge pi/2
+
+        self.set_pulse_params(q_drive_ch, style='arb', waveform=q_pulse_cfg['waveform'], freq=q_pulse_cfg['ef_freq'],
+                              phase=q_pulse_cfg.get("phase", 0), gain=int(q_pulse_cfg['ef_pi2_gain']*0.5))
+        self.pulse(ch=self.cfg['gen_chs'][q_drive_ch]['ch'])  # play ge pi/2
         self.sync_all(self.us2cycles(0.01))
 
         self.add_prepare_msmt_general(q_drive_ch, q_pulse_cfg_, res_ch, syncdelay, adcs)
 
-
-    def add_prepare_msmt_general(self:QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
-                         adcs=None):
+    def add_prepare_msmt_general(self: QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
+                                 adcs=None):
         """
         add a state preparation measurement to the qick asm program.
 
@@ -993,6 +1021,7 @@ class QubitMsmtMixin:
         :param res_ch: Resonator drive channel name
         :param syncdelay: time to wait after msmt, in us
         :param prepare_q_gain: q drive gain for the prepare pulse
+        :param adcs: readout channels
         :return:
         """
         
@@ -1010,8 +1039,8 @@ class QubitMsmtMixin:
                      wait=True,
                      syncdelay=self.us2cycles(syncdelay))
 
-    def add_prepare_msmt_with_amps(self: QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_chs: list[int], syncdelay: float,
-                         prepare_q_gain: int = None, adcs=None):
+    def add_prepare_msmt_with_amps(self: QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_chs: list[int],
+                                   syncdelay: float, prepare_q_gain: int = None, adcs=None):
         """
         add a state preparation measurement to the qick asm program.
 
@@ -1022,6 +1051,7 @@ class QubitMsmtMixin:
         :param res_chs: Resonator drive channels in a list. This supports turning on all the amp channels as well
         :param syncdelay: time to wait after msmt, in us
         :param prepare_q_gain: q drive gain for the prepare pulse
+        :param adcs: readout channels
         :return:
         """
         if prepare_q_gain is None:
@@ -1032,8 +1062,8 @@ class QubitMsmtMixin:
 
         self.add_prepare_msmt_general_with_amps(q_drive_ch, q_pulse_cfg_, res_chs, syncdelay, adcs)
 
-    def add_prepare_msmt_general_with_amps(self: QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_chs: list[int], syncdelay: float,
-                                 adcs=None):
+    def add_prepare_msmt_general_with_amps(self: QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_chs: list[int],
+                                           syncdelay: float, adcs=None):
         """
         add a state preparation measurement to the qick asm program.
 
@@ -1043,6 +1073,7 @@ class QubitMsmtMixin:
         :param res_chs: Resonator drive channels dictionary
         :param syncdelay: time to wait after msmt, in us
         :param prepare_q_gain: q drive gain for the prepare pulse
+        :param adcs: readout channels
         :return:
         """
 
@@ -1060,8 +1091,7 @@ class QubitMsmtMixin:
                      wait=True,
                      syncdelay=self.us2cycles(syncdelay))
 
-
-    def add_tomo(self:QickProgram, core:Callable, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
+    def add_tomo(self: QickProgram, core: Callable, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
                  ro_ch=None, phase_off=0):
         """
         add qubit tomography msmts after the core experiment
@@ -1097,3 +1127,5 @@ class QubitMsmtMixin:
                          adc_trig_offset=self.cfg["adc_trig_offset"],
                          wait=True,
                          syncdelay=self.us2cycles(syncdelay))
+
+
