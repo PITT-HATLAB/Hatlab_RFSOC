@@ -784,13 +784,106 @@ class QubitMsmtMixin:
         :return:
         """
         if prepare_q_gain is None:
-            prepare_q_gain = int(q_pulse_cfg["pi2_gain"] * 0.75)
+            prepare_q_gain = int(q_pulse_cfg["pi2_gain"] * 0.3)
             
         q_pulse_cfg_ = dict(style="arb", waveform=q_pulse_cfg["waveform"],
                               phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
 
         self.add_prepare_msmt_general(q_drive_ch, q_pulse_cfg_, res_ch, syncdelay, adcs)
 
+    def add_prepare_msmt_subh(self: QickProgram, subh_drive_ch: str, subh_pulse_cfg: dict, res_ch: str, syncdelay: float,
+                         prepare_q_gain: int = None, adcs=None):
+        """
+        add a state preparation measurement to the qick asm program.
+
+        :param self:
+        :param q_drive_ch: Qubit drive channel name
+        :param q_pulse_cfg: Qubit drive pulse_cfg, should be the "q_pulse_cfg" in the yml file, which contains the
+            "ge_freq".
+        :param res_ch: Resonator drive channel name
+        :param syncdelay: time to wait after msmt, in us
+        :param prepare_q_gain: q drive gain for the prepare pulse
+        :return:
+        """
+        if prepare_q_gain is None:
+            prepare_q_gain = int(subh_pulse_cfg["pi2_gain"] * 0.8)
+
+        subh_pulse_cfg_ = dict(style="arb", waveform=subh_pulse_cfg["waveform"],
+                            phase=subh_pulse_cfg.get("phase", 0), freq=subh_pulse_cfg["ge_freq"], gain=prepare_q_gain)
+
+        self.add_prepare_msmt_general(subh_drive_ch, subh_pulse_cfg_, res_ch, syncdelay, adcs)
+
+    def add_efprepare_msmt(self: QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
+                         prepare_q_gain: int = None, adcs=None):
+        """
+        add a state preparation measurement to the qick asm program.
+
+        :param self:
+        :param q_drive_ch: Qubit drive channel name
+        :param q_pulse_cfg: Qubit drive pulse_cfg, should be the "q_pulse_cfg" in the yml file, which contains the
+            "ge_freq".
+        :param res_ch: Resonator drive channel name
+        :param syncdelay: time to wait after msmt, in us
+        :param prepare_q_gain: q drive gain for the prepare pulse
+        :return:
+        """
+        if prepare_q_gain is None:
+            prepare_q_gain = int(q_pulse_cfg["pi_gain"] * 0.5)
+
+        # q_pulse_cfg_ = dict(style="arb", waveform=q_pulse_cfg["waveform"],
+        #                     phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=prepare_q_gain)
+        self.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
+                            phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ge_freq"], gain=int(q_pulse_cfg["pi2_gain"]))
+        self.pulse(ch=self.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
+        self.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
+                            phase=q_pulse_cfg.get("phase", 0), freq=q_pulse_cfg["ef_freq"], gain=int(q_pulse_cfg["ef_pi2_gain"]*0.75))
+        self.pulse(ch=self.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
+
+        self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
+
+        # add measurement
+        self.measure(pulse_ch=self.cfg["gen_chs"][res_ch]["ch"],
+                     adcs=adcs if adcs is not None else self.ro_chs,
+                     pins=[0],
+                     adc_trig_offset=self.cfg["adc_trig_offset"],
+                     wait=True,
+                     syncdelay=self.us2cycles(syncdelay))
+
+    def add_subh_efprepare_msmt(self: QickProgram, q_drive_ch: str, subh_pulse_cfg: dict, res_ch: str, syncdelay: float,
+                         prepare_q_gain: int = None, adcs=None):
+        """
+        add a state preparation measurement to the qick asm program.
+
+        :param self:
+        :param q_drive_ch: Qubit drive channel name
+        :param q_pulse_cfg: Qubit drive pulse_cfg, should be the "q_pulse_cfg" in the yml file, which contains the
+            "ge_freq".
+        :param res_ch: Resonator drive channel name
+        :param syncdelay: time to wait after msmt, in us
+        :param prepare_q_gain: q drive gain for the prepare pulse
+        :return:
+        """
+        if prepare_q_gain is None:
+            prepare_q_gain = int(subh_pulse_cfg["pi_gain"] * 0.75)
+
+        subh_pulse_cfg_ = dict(style="arb", waveform=waveforms["subh_tanh2"],
+                            phase=subh_pulse_cfg.get("phase", 0), freq=subh_pulse_cfg["ge_freq"], gain=subh_pulse_cfg["pi_gain"])
+        self.set_pulse_params(q_drive_ch, style="arb", waveform=waveforms["subh_tanh2"],
+                            phase=subh_pulse_cfg.get("phase", 0), freq=subh_pulse_cfg["ge_freq"], gain=subh_pulse_cfg["pi_gain"])
+        self.pulse(ch=self.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
+        self.set_pulse_params(q_drive_ch, style="arb", waveform=waveforms["ef_subh_tanh2"],
+                            phase=subh_pulse_cfg.get("phase", 0), freq=subh_pulse_cfg["ef_freq"], gain=subh_pulse_cfg["ef_pi_gain"])
+        self.pulse(ch=self.cfg["gen_chs"][q_drive_ch]["ch"])  # play gaussian pulse
+
+        self.sync_all(self.us2cycles(0.05))  # align channels and wait 50ns
+
+        # add measurement
+        self.measure(pulse_ch=self.cfg["gen_chs"][res_ch]["ch"],
+                     adcs=adcs if adcs is not None else self.ro_chs,
+                     pins=[0],
+                     adc_trig_offset=self.cfg["adc_trig_offset"],
+                     wait=True,
+                     syncdelay=self.us2cycles(syncdelay))
 
 
     def add_prepare_msmt_general(self:QickProgram, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
@@ -908,3 +1001,52 @@ class QubitMsmtMixin:
                          adc_trig_offset=self.cfg["adc_trig_offset"],
                          wait=True,
                          syncdelay=self.us2cycles(syncdelay))
+
+    def add_qutrit_tomo(self:QickProgram, core:Callable, q_drive_ch: str, q_pulse_cfg: dict, res_ch: str, syncdelay: float,
+                 ro_ch=None, phase_off=0):
+        """
+        add qutrit tomography msmts after the core experiment (assumes calibrated ge and ef pulses, and gef readout)
+
+        :param core: core part of the experiment
+        :param q_drive_ch: Qubit drive channel name
+        :param q_pulse_cfg: Qubit drive pulse_cfg
+        :param res_ch: Resonator drive channel name
+        :param syncdelay: time to wait after msmt, in us
+        :param ro_ch: readout channel. By default, all readout channels will be trigger.
+        :param phase_off: phase offset for the tomography, in deg
+        :return:
+        """
+        ge_pi2_gain = q_pulse_cfg["pi2_gain"]
+        ef_pi2_gain = q_pulse_cfg["ef_pi2_gain"]
+        gf_pi2_gain = q_pulse_cfg["gf_pi2_gain"]
+
+        ge_freq = q_pulse_cfg["ge_freq"]
+        ef_freq = q_pulse_cfg["ef_freq"]
+        gf_freq = q_pulse_cfg["gf_freq"]
+
+        freq_list = [ge_freq, ef_freq]
+
+        states = ["ge", "ef", "gf"]
+
+        if ro_ch is None:
+            ro_ch = self.ro_chs
+        tomo_phases = phase_off + np.array([-90, 0, 0])
+        for label in states:
+            for phase_t, gain_t in zip(tomo_phases, [q_pulse_cfg[f"{label}_pi2_gain"], q_pulse_cfg[f"{label}_pi2_gain"], 0]):
+                # perform core experiment
+                core()
+
+                # play tomo pulse
+                self.set_pulse_params(q_drive_ch, style="arb", waveform=q_pulse_cfg["waveform"],
+                                      phase=phase_t, freq=q_pulse_cfg[f"{label}_freq"], gain=gain_t)
+
+                self.pulse(ch=self.cfg["gen_chs"][q_drive_ch]["ch"])
+                self.sync_all(0.05)  # align channels and wait
+
+                # add measurement
+                self.measure(pulse_ch=self.cfg["gen_chs"][res_ch]["ch"],
+                             adcs=ro_ch,
+                             pins=[0],
+                             adc_trig_offset=self.cfg["adc_trig_offset"],
+                             wait=True,
+                             syncdelay=self.us2cycles(syncdelay))

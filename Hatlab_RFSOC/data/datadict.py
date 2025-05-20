@@ -280,11 +280,12 @@ class DataFromQDDH5:
         # reshape original data based on the size of each sweep axes (including reps and msmts)
         for k, v in self.datadict.items():
             if "avg_iq" in k:
-                rch = k.replace("avg_iq_", "")
+                # rch = k.replace("avg_iq_", "")
+                rch=0
                 self.avg_iq[rch] = self._reshape_original_data(v)
                 self.ro_chs.append(rch)
             if "buf_iq" in k:
-                rch = k.replace("buf_iq_", "")
+                # rch = k.replace("buf_iq_", "")
                 self.buf_iq[rch] = self._reshape_original_data(v)
 
         if merge_reps:
