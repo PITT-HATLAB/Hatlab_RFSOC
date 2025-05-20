@@ -23,10 +23,6 @@ def tanh_box(length: int, ramp_width: int, cut_offset=0.01, maxv=30000):
                 1 - cut_offset) * maxv
     return y - np.min(y)
 
-            1 - cut_offset) * maxv
-    return y - np.min(y)
-
-
 def gaussian(sigma: int, length: int, maxv=30000):
     """
     Create a numpy array containing a Gaussian function.

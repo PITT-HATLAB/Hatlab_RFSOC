@@ -1,7 +1,6 @@
 import warnings
 from typing import List, Union, Type, Callable
 import numpy as np
-from qick.asm_v1 import QickProgram
 import matplotlib.pyplot as plt
 
 NumType = Union[int, float]
