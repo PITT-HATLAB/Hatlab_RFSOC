@@ -140,9 +140,8 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
         super().__init__(soccfg)
         self.cfg = cfg
         self.reps = cfg["reps"]
-        self.soft_avgs = 1
         if "soft_avgs" in cfg:
-            self.soft_avgs = cfg['soft_avgs']
+            self.rounds = cfg['soft_avgs']
         if "rounds" in cfg:
             self.rounds = cfg['rounds']
         self.expts = None  # abstract variable for total number of experiments in each repetition.
@@ -349,11 +348,7 @@ class APAveragerProgram(QickRegisterManagerMixin, QickProgram):
         """
         Copied from qick.AveragerProgram
         """
-        if debug:
-            print(self.asm())
-        buf = super().acquire_decimated(soc, soft_avgs=self.soft_avgs, load_pulses=True, start_src="internal", progress=True, remove_offset=True)
-        # return buf
-        # buf = super().acquire_decimated(soc, reads_per_rep=readouts_per_experiment, load_pulses=load_pulses, start_src=start_src, progress=progress, debug=debug)
+        buf = super().acquire_decimated(soc, reads_per_rep=readouts_per_experiment, load_pulses=load_pulses, start_src=start_src, progress=progress, debug=debug)
         # move the I/Q axis from last to second-last
         return [np.moveaxis(d, -1, -2) for d in buf]
 
