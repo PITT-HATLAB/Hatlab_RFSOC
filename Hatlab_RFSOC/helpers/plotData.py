@@ -43,39 +43,44 @@ def plotAvgIQresults(xdata, avgi, avgq, windowName=None, title=None, xlabel=None
         fig.suptitle(title)
         plt.tight_layout()
 
-def plotIQHist2dLog(di_buf, dq_buf, ro_chs=None, bins=101):
+def plotIQHist2dLog(di_buf, dq_buf, ro_chs=None, bins=101, histRange=None):
     n_ch = len(di_buf)
     fig, axs = plt.subplots(1, n_ch, figsize=(n_ch*5, 4.5))
     if n_ch == 1:
         axs = [axs]
     for i in range(n_ch):
         ax = axs[i]
-        range_ = np.max(np.abs([di_buf[i], dq_buf[i]]))
+        if histRange is None:
+            range_ = np.max(np.abs([di_buf[i], dq_buf[i]]))
+            histRange = [[-range_, range_],[-range_, range_]]
         if ro_chs is not None:
             ax.set_title("ADC %d"%(ro_chs[i]))
-        hist, binx, biny = np.histogram2d(di_buf[i], dq_buf[i], bins=bins, range=[[-range_, range_],[-range_, range_]])
+        hist, binx, biny = np.histogram2d(di_buf[i], dq_buf[i], bins=bins, range=histRange)
         ax.pcolormesh(binx, biny, 10*np.log10(hist.T))
         ax.set_aspect(1)
         ax.set_ylabel("Q")
         ax.set_xlabel("I")
 
-def plotIQHist2d(di_buf, dq_buf, ro_chs=None, bins=101, logPlot=False):
+def plotIQHist2d(di_buf, dq_buf, ro_chs=None, bins=101, logPlot=False, histRange=None):
     n_ch = len(di_buf)
     fig, axs = plt.subplots(1, n_ch, figsize=(1+n_ch*5, 4.5))
     if n_ch == 1:
         axs = [axs]
     for i in range(n_ch):
         ax = axs[i]
-        range_ = np.max(np.abs([di_buf[i], dq_buf[i]]))
+        if histRange is None:
+            range_ = np.max(np.abs([di_buf[i], dq_buf[i]]))
+            histRange = [[-range_, range_],[-range_, range_]]
         if ro_chs is not None:
             ax.set_title("ADC %d"%(ro_chs[i]))
         if logPlot:
-            hist, x, y = np.histogram2d(di_buf[i], dq_buf[i], bins=bins, range=[[-range_, range_],[-range_, range_]])
+            hist, x, y = np.histogram2d(di_buf[i], dq_buf[i], bins=bins, range=histRange)
             pcm = ax.pcolor(x,y,np.log(hist).T)
             fig.colorbar(pcm, ax=ax)
         else:
-            pcm = ax.hist2d(di_buf[i], dq_buf[i], bins=bins, range=[[-range_, range_],[-range_, range_]])
+            pcm = ax.hist2d(di_buf[i], dq_buf[i], bins=bins, range=histRange)
             fig.colorbar(pcm[3], ax=ax)
+        ax.plot(0,0,"y*")
         ax.set_aspect(1)
         ax.set_ylabel("Q")
         ax.set_xlabel("I")
